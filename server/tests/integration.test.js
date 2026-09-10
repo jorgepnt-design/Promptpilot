@@ -163,7 +163,12 @@ await test('Gleichzeitige Änderung erhält beide Fassungen', async () => {
     },
   })
   assert.equal(r.body.conflicts, 1, 'Konflikt wurde nicht gemeldet')
-  assert.equal(r.body.conflicts && r.body.prompts.find((p) => p.id === 'p1').title, 'Porträt überarbeitet')
+  // Die Liste der Konflikte muss eine Liste bleiben. Sie hieß einmal genauso
+  // wie die Anzahl und wurde davon überschrieben – der Client lief auf die Nase.
+  assert.ok(Array.isArray(r.body.conflictRecords), 'conflictRecords ist keine Liste')
+  assert.equal(r.body.conflictRecords.length, 1)
+  assert.equal(r.body.conflictRecords[0].title, 'Fassung vom Handy', 'lokale Fassung fehlt')
+  assert.equal(r.body.prompts.find((p) => p.id === 'p1').title, 'Porträt überarbeitet')
 })
 
 await test('Löschung reist als Tombstone mit', async () => {
@@ -185,6 +190,20 @@ await test('Löschung reist als Tombstone mit', async () => {
   const p2 = r.body.prompts.find((p) => p.id === 'p2')
   assert.ok(p2, 'p2 fehlt ganz')
   assert.equal(p2.deletedAt, 4000, 'Tombstone ging verloren')
+})
+
+await test('Antwort enthält überall Listen, nie Zahlen', async () => {
+  const r = await call('/api/sync', {
+    method: 'POST',
+    token: tokenA,
+    body: { lastSyncAt: null, prompts: [], categories: [], collections: [] },
+  })
+  for (const feld of ['prompts', 'categories', 'collections', 'conflictRecords']) {
+    assert.ok(Array.isArray(r.body[feld]), `${feld} ist keine Liste, sondern ${typeof r.body[feld]}`)
+  }
+  for (const feld of ['pushed', 'pulled', 'conflicts', 'at']) {
+    assert.equal(typeof r.body[feld], 'number', `${feld} ist keine Zahl`)
+  }
 })
 
 await test('Bild hochladen und zurückholen', async () => {

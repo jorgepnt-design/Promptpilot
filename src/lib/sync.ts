@@ -28,7 +28,7 @@ interface SyncResponse {
   prompts: Prompt[]
   categories: Category[]
   collections: Collection[]
-  conflicts: Prompt[]
+  conflictRecords: Prompt[]
   pushed: number
   pulled: number
   at: number
@@ -108,7 +108,7 @@ async function runSync(lastSyncAt: number | null): Promise<SyncResult> {
 
   // Konflikte: die eigene Fassung als zusätzlichen Prompt bewahren, damit
   // nichts stillschweigend verloren geht.
-  const conflictCopies: Prompt[] = (res.conflicts ?? []).map((p) =>
+  const conflictCopies: Prompt[] = (res.conflictRecords ?? []).map((p) =>
     emptyPrompt({
       ...p,
       id: newId(),

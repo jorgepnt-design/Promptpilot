@@ -238,7 +238,9 @@ export function createApp({ pool, verifyGoogle }) {
         const merged = await mergeKind(client, req.userId, table, incoming, lastSyncAt)
         result[kind] = merged.toClient
         if (kind === 'prompts') {
-          result.conflicts = merged.conflicts
+          // Eigener Name: 'conflicts' ist weiter unten die ANZAHL und würde
+          // diese Liste beim Zusammenbauen der Antwort überschreiben.
+          result.conflictRecords = merged.conflicts
           conflicts = merged.conflicts.length
         }
         pushed += merged.pushed
