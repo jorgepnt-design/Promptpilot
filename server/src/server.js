@@ -162,7 +162,11 @@ export function createApp({ pool, verifyGoogle }) {
         // geschützte Route ohnehin ein gültiges Sitzungstoken verlangt.
         if (!origin) return cb(null, true)
         if (!ALLOWED_ORIGINS.length || ALLOWED_ORIGINS.includes(origin)) return cb(null, true)
-        cb(new Error('Diese Herkunft ist nicht freigegeben.'))
+        // Nicht werfen: eine Ausnahme hier endet als 500 ohne CORS-Header und
+        // sieht im Browser aus wie ein toter Dienst. Sauber ablehnen und die
+        // abgewiesene Herkunft protokollieren, damit die Ursache auffindbar ist.
+        console.warn(`CORS abgelehnt: ${origin} steht nicht in ALLOWED_ORIGINS (${ALLOWED_ORIGINS.join(', ') || 'leer'})`)
+        cb(null, false)
       },
       methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization'],
@@ -205,7 +209,8 @@ export function createApp({ pool, verifyGoogle }) {
         expiresInDays: TOKEN_DAYS,
         user: { email: user.email, name: user.name },
       })
-    } catch {
+    } catch (e) {
+      console.error('Anmeldung fehlgeschlagen:', e)
       res.status(500).json({ error: 'Die Anmeldung ist fehlgeschlagen.' })
     }
   })
@@ -244,7 +249,8 @@ export function createApp({ pool, verifyGoogle }) {
       res.json({ ...result, pushed, pulled, conflicts, at: Date.now() })
     } catch (e) {
       await client.query('rollback').catch(() => {})
-      res.status(500).json({ error: 'Der Abgleich ist fehlgeschlagen.' })
+      console.error('Abgleich fehlgeschlagen:', e)
+      res.status(500).json({ error: `Der Abgleich ist fehlgeschlagen: ${e.message}` })
     } finally {
       client.release()
     }
