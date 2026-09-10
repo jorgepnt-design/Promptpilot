@@ -86,7 +86,14 @@ html,
 body {
   margin: 0;
   padding: 0;
-  overflow-x: hidden;
+}
+
+/* Waagerechten Überhang abschneiden, ohne einen zweiten Scroll-Behälter zu
+   erzeugen: 'hidden' auf html UND body ließ die sichtbare Bildlaufleiste zum
+   einen Behälter gehören und das Mausrad zum anderen – das Rad tat nichts.
+   'clip' schneidet genauso ab, scrollt aber nicht. */
+html {
+  overflow-x: clip;
 }
 
 body {
