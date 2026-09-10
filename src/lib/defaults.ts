@@ -40,7 +40,7 @@ export const DEFAULT_TOOLS = [
 export const DEFAULT_LANGUAGES = ['Deutsch', 'Englisch', 'Portugiesisch', 'Spanisch', 'Französisch']
 
 export const DEFAULT_SETTINGS: Settings = {
-  theme: 'system',
+  theme: 'light',
   viewMode: 'cards',
   sort: 'updated',
   tools: DEFAULT_TOOLS,
