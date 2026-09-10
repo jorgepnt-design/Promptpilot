@@ -35,8 +35,13 @@ interface SyncResponse {
 }
 
 function wrap(e: unknown): SyncError {
+  if (e instanceof SyncError) return e
   if (e instanceof ApiError) return new SyncError(e.message)
-  return new SyncError('Der Abgleich ist fehlgeschlagen.')
+  // Unerwartetes nicht verschlucken: die Ursache gehört in die Meldung,
+  // sonst steht der Nutzer vor einem nichtssagenden "fehlgeschlagen".
+  const detail = e instanceof Error ? e.message : String(e)
+  console.error('Abgleich fehlgeschlagen:', e)
+  return new SyncError(`Der Abgleich ist fehlgeschlagen: ${detail}`)
 }
 
 /* ------------------------------ Anmeldung ------------------------------ */
@@ -78,6 +83,14 @@ export async function signOut(): Promise<void> {
 /* ------------------------------- Abgleich ------------------------------- */
 
 export async function syncAll(lastSyncAt: number | null): Promise<SyncResult> {
+  try {
+    return await runSync(lastSyncAt)
+  } catch (e) {
+    throw wrap(e)
+  }
+}
+
+async function runSync(lastSyncAt: number | null): Promise<SyncResult> {
   if (!navigator.onLine) throw new SyncError('Offline – der Abgleich wird nachgeholt.')
 
   const [prompts, categories, collections] = await Promise.all([
@@ -86,15 +99,10 @@ export async function syncAll(lastSyncAt: number | null): Promise<SyncResult> {
     db.getAll<Collection>(STORES.collections),
   ])
 
-  let res: SyncResponse
-  try {
-    res = await api<SyncResponse>('/api/sync', {
-      method: 'POST',
-      body: { lastSyncAt, prompts, categories, collections },
-    })
-  } catch (e) {
-    throw wrap(e)
-  }
+  const res = await api<SyncResponse>('/api/sync', {
+    method: 'POST',
+    body: { lastSyncAt, prompts, categories, collections },
+  })
 
   const now = Date.now()
 
