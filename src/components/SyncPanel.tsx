@@ -1,7 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from '../state/store'
-import { isSupabaseConfigured } from '../lib/supabase'
-import { SyncError, currentUser, signIn, signOut, signUp, syncAll } from '../lib/sync'
+import { GOOGLE_CLIENT_ID, isSyncConfigured, renderGoogleButton } from '../lib/api'
+import {
+  SyncError,
+  currentAccount,
+  signInWithGoogle,
+  signOut,
+  syncAll,
+  type Account,
+} from '../lib/sync'
 import { IconCloud } from './Icons'
 
 export function SyncStatePill() {
@@ -25,31 +32,58 @@ export function SyncStatePill() {
 
 export function SyncPanel() {
   const store = useStore()
-  const configured = isSupabaseConfigured()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [user, setUser] = useState<{ id: string; email?: string } | null>(null)
+  const configured = isSyncConfigured()
+  const [account, setAccount] = useState<Account | null>(null)
+  const [checked, setChecked] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
+  const buttonRef = useRef<HTMLDivElement>(null)
 
+  /* Bestehende Sitzung? */
   useEffect(() => {
     if (!configured) {
       store.setSyncState('disabled')
+      setChecked(true)
       return
     }
-    currentUser()
-      .then((u) => {
-        if (u) {
-          setUser({ id: u.id, email: u.email ?? undefined })
-          store.setSyncState('local')
-        }
+    currentAccount()
+      .then((a) => {
+        setAccount(a)
+        store.setSyncState(a ? 'local' : 'disabled')
       })
-      .catch(() => undefined)
+      .finally(() => setChecked(true))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configured])
 
-  const runSync = useCallback(async () => {
+  const anmelden = useCallback(
+    async (credential: string) => {
+      setError(null)
+      setBusy(true)
+      try {
+        const a = await signInWithGoogle(credential)
+        setAccount(a)
+        store.setSyncState('local')
+        store.notify(`Angemeldet als ${a.email}`, 'success')
+      } catch (e) {
+        setError(e instanceof SyncError ? e.message : 'Die Anmeldung ist fehlgeschlagen.')
+      } finally {
+        setBusy(false)
+      }
+    },
+    [store],
+  )
+
+  /* Google-Knopf zeichnen, sobald klar ist, dass niemand angemeldet ist. */
+  useEffect(() => {
+    if (!configured || !checked || account || !buttonRef.current) return
+    const dunkel = document.documentElement.getAttribute('data-theme') !== 'light'
+    renderGoogleButton(buttonRef.current, anmelden, dunkel).catch(() =>
+      setError('Googles Anmeldedienst konnte nicht geladen werden.'),
+    )
+  }, [configured, checked, account, anmelden])
+
+  const abgleichen = useCallback(async () => {
     setError(null)
     setInfo(null)
     if (!navigator.onLine) {
@@ -59,180 +93,94 @@ export function SyncPanel() {
     setBusy(true)
     store.setSyncState('syncing')
     try {
-      const res = await syncAll(store.settings.lastSyncAt)
-      await store.updateSettings({ lastSyncAt: res.at, syncEnabled: true })
+      const r = await syncAll(store.settings.lastSyncAt)
+      await store.updateSettings({ lastSyncAt: r.at, syncEnabled: true })
       await store.reload()
       store.setSyncState('synced')
-      setInfo(
-        `Abgleich abgeschlossen: ${res.pushed} hochgeladen, ${res.pulled} übernommen` +
-          (res.conflicts ? `, ${res.conflicts} Konflikt(e) als zusätzliche Fassung gesichert` : '') +
-          (res.imagesUp || res.imagesDown
-            ? `, Bilder: ${res.imagesUp} hoch / ${res.imagesDown} runter`
-            : ''),
-      )
-    } catch (err) {
-      const msg = err instanceof SyncError ? err.message : 'Unbekannter Fehler beim Abgleich.'
-      store.setSyncState(navigator.onLine ? 'error' : 'offline-pending', msg)
-      setError(msg)
+      const teile = [`${r.pushed} hoch`, `${r.pulled} herunter`]
+      if (r.imagesUp || r.imagesDown) teile.push(`${r.imagesUp + r.imagesDown} Bilder`)
+      if (r.conflicts) teile.push(`${r.conflicts} Konflikt(e) als Kopie erhalten`)
+      setInfo(`Abgleich fertig – ${teile.join(', ')}`)
+    } catch (e) {
+      const m = e instanceof SyncError ? e.message : 'Der Abgleich ist fehlgeschlagen.'
+      store.setSyncState('error', m)
+      setError(m)
+      if (/angemeldet|abgelaufen/i.test(m)) setAccount(null)
     } finally {
       setBusy(false)
     }
   }, [store])
 
+  const abmelden = useCallback(async () => {
+    await signOut()
+    setAccount(null)
+    setInfo(null)
+    await store.updateSettings({ syncEnabled: false })
+    store.setSyncState('disabled')
+  }, [store])
+
   if (!configured) {
     return (
       <div className="setting-card">
-        <h3>Synchronisierung zwischen Geräten</h3>
+        <h3>Abgleich zwischen Geräten</h3>
         <p>
-          Die Cloud-Anbindung ist vollständig vorbereitet, aber noch nicht eingerichtet. Ohne
-          Zugangsdaten arbeitet PromptPilot rein lokal – alle Funktionen bleiben nutzbar.
+          Für diese Fassung der App ist kein Abgleich eingerichtet. Sie arbeitet rein lokal – alle
+          übrigen Funktionen stehen unverändert zur Verfügung. Wie sich der Abgleich einrichten
+          lässt, steht in der <code>README</code> des Projekts.
         </p>
-        <div className="notice">
-          <div>
-            <strong>So wird sie aktiviert:</strong>
-            <ol style={{ margin: '8px 0 0 18px', padding: 0 }}>
-              <li>Kostenloses Supabase-Projekt anlegen.</li>
-              <li>
-                Die Datei <code>supabase/schema.sql</code> im SQL-Editor ausführen (Tabellen,
-                Zugriffsregeln, Bild-Speicher).
-              </li>
-              <li>
-                Projekt-URL und den öffentlichen anon-Key als <code>VITE_SUPABASE_URL</code> und{' '}
-                <code>VITE_SUPABASE_ANON_KEY</code> hinterlegen (siehe <code>.env.example</code>).
-              </li>
-              <li>App neu bauen und veröffentlichen.</li>
-            </ol>
-          </div>
-        </div>
+        {!GOOGLE_CLIENT_ID && (
+          <div className="hint">Es fehlt die Angabe der Google-Kennung im Build.</div>
+        )}
       </div>
     )
   }
 
   return (
     <div className="setting-card">
-      <h3>Synchronisierung zwischen Geräten</h3>
+      <h3>Abgleich zwischen Geräten</h3>
       <p>
-        Mit Konto liegen dieselben Prompts auf iPhone und Laptop. Jedes Konto sieht ausschließlich
-        die eigenen Daten – das erzwingt zusätzlich der Zugriffsschutz in der Datenbank.
+        Mit deinem Google-Konto anmelden, dann liegen Prompts, Kategorien, Sammlungen und Bilder auf
+        allen Geräten gleich. Wurde derselbe Prompt auf zwei Geräten gleichzeitig geändert, bleiben
+        beide Fassungen erhalten – es geht nichts still verloren.
       </p>
 
-      {user ? (
+      {!account ? (
         <>
-          <div className="setting-row">
-            <span className="grow">
-              <IconCloud size={17} style={{ verticalAlign: -3, marginRight: 6 }} />
-              Angemeldet als {user.email ?? user.id}
-            </span>
-            <button className="btn btn-sm" onClick={runSync} disabled={busy}>
-              {busy ? 'Läuft …' : 'Jetzt abgleichen'}
-            </button>
-            <button
-              className="btn btn-sm"
-              onClick={async () => {
-                await signOut()
-                setUser(null)
-                await store.updateSettings({ syncEnabled: false })
-                store.setSyncState('local')
-              }}
-            >
-              Abmelden
-            </button>
-          </div>
-          <div className="setting-row">
-            <span className="grow hint" style={{ margin: 0 }}>
-              {store.settings.lastSyncAt
-                ? `Letzter erfolgreicher Abgleich: ${new Date(
-                    store.settings.lastSyncAt,
-                  ).toLocaleString('de-DE')}`
-                : 'Noch kein Abgleich durchgeführt.'}
-            </span>
+          <div ref={buttonRef} style={{ minHeight: 44, display: 'flex', alignItems: 'center' }} />
+          {!checked && <div className="hint">Anmeldung wird geprüft …</div>}
+          <div className="hint" style={{ marginTop: 10 }}>
+            Deine Prompts bleiben beim Anmelden erhalten und werden beim ersten Abgleich
+            hochgeladen – nichts wird ersetzt.
           </div>
         </>
       ) : (
         <>
-          <div className="field-row two">
-            <div className="field">
-              <label htmlFor="sy-mail">E-Mail</label>
-              <input
-                id="sy-mail"
-                className="input"
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="sy-pass">Passwort</label>
-              <input
-                id="sy-pass"
-                className="input"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button
-              className="btn btn-primary"
-              disabled={busy || !email || !password}
-              onClick={async () => {
-                setBusy(true)
-                setError(null)
-                try {
-                  const u = await signIn(email, password)
-                  if (u) setUser({ id: u.id, email: u.email ?? undefined })
-                  setPassword('')
-                  await runSync()
-                } catch (err) {
-                  setError(err instanceof SyncError ? err.message : 'Anmeldung fehlgeschlagen.')
-                } finally {
-                  setBusy(false)
-                }
-              }}
-            >
-              Anmelden
+          <div className="setting-row">
+            <span className="grow">
+              Angemeldet als <strong>{account.email}</strong>
+            </span>
+            <button className="btn btn-sm btn-primary" onClick={abgleichen} disabled={busy}>
+              <IconCloud size={17} />
+              {busy ? 'Abgleich läuft …' : 'Jetzt abgleichen'}
             </button>
-            <button
-              className="btn"
-              disabled={busy || !email || !password}
-              onClick={async () => {
-                setBusy(true)
-                setError(null)
-                try {
-                  await signUp(email, password)
-                  setInfo(
-                    'Konto angelegt. Falls die E-Mail-Bestätigung aktiv ist, zuerst den Link in der E-Mail öffnen.',
-                  )
-                } catch (err) {
-                  setError(err instanceof SyncError ? err.message : 'Registrierung fehlgeschlagen.')
-                } finally {
-                  setBusy(false)
-                }
-              }}
-            >
-              Konto anlegen
+            <button className="btn btn-sm" onClick={abmelden} disabled={busy}>
+              Abmelden
             </button>
           </div>
+
+          {store.settings.lastSyncAt && (
+            <div className="setting-row">
+              <span className="grow">Letzter Abgleich</span>
+              <span className="hint">
+                {new Date(store.settings.lastSyncAt).toLocaleString('de-DE')}
+              </span>
+            </div>
+          )}
         </>
       )}
 
-      {error && (
-        <div className="notice notice-warn" style={{ marginTop: 14 }} role="alert">
-          {error}
-        </div>
-      )}
-      {info && (
-        <div className="notice" style={{ marginTop: 14 }}>
-          {info}
-        </div>
-      )}
-      <div className="hint">
-        Vorhandene lokale Prompts werden beim ersten Abgleich übernommen. Ändern zwei Geräte
-        denselben Prompt, bleibt die zweite Fassung als zusätzlicher Eintrag erhalten.
-      </div>
+      {info && <div className="notice">{info}</div>}
+      {error && <div className="notice notice-warn">{error}</div>}
     </div>
   )
 }

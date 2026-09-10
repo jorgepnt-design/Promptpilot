@@ -1,22 +1,16 @@
 import type { Category, Collection, Prompt, StoredImage } from '../types'
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { IMAGE_BUCKET, getSupabase } from './supabase'
 import * as db from './db'
 import { STORES } from './db'
 import { emptyPrompt } from './defaults'
 import { newId } from './id'
+import { ApiError, api, clearToken, forgetGoogleSession, setToken } from './api'
 
 /**
- * Zwei-Wege-Abgleich zwischen lokaler IndexedDB und Supabase.
+ * Zwei-Wege-Abgleich mit dem eigenen Dienst.
  *
- * Regeln:
- *  - Jeder Datensatz trägt user_id; der Zugriffsschutz wird zusätzlich im Backend
- *    per Row Level Security erzwungen (siehe supabase/schema.sql).
- *  - Neuere Änderung gewinnt (updated_at). Wurden beide Seiten seit dem letzten
- *    Abgleich geändert, bleibt die Gegenfassung als zusätzlicher Prompt erhalten.
- *  - Löschungen reisen als Tombstone (deleted_at) mit, damit gelöschte Inhalte
- *    nicht durch ein anderes Gerät zurückkehren.
- *  - Der Abgleich ist wiederholbar: gleiche IDs führen zu Updates, nie zu Dubletten.
+ * Die Regeln entsprechen denen des Servers: neuere Änderung gewinnt, bei
+ * gleichzeitiger Änderung bleiben beide Fassungen erhalten, Löschungen reisen
+ * als Tombstone mit. Der Server entscheidet, der Client übernimmt das Ergebnis.
  */
 
 export interface SyncResult {
@@ -30,261 +24,196 @@ export interface SyncResult {
 
 export class SyncError extends Error {}
 
-interface RemotePrompt {
-  id: string
-  user_id: string
-  data: Prompt
-  updated_at: string
-  deleted_at: string | null
+interface SyncResponse {
+  prompts: Prompt[]
+  categories: Category[]
+  collections: Collection[]
+  conflicts: Prompt[]
+  pushed: number
+  pulled: number
+  at: number
 }
 
-function toIso(ms: number): string {
-  return new Date(ms).toISOString()
-}
-function fromIso(iso: string | null): number {
-  return iso ? new Date(iso).getTime() : 0
+function wrap(e: unknown): SyncError {
+  if (e instanceof ApiError) return new SyncError(e.message)
+  return new SyncError('Der Abgleich ist fehlgeschlagen.')
 }
 
-async function requireSession() {
-  const sb = await getSupabase()
-  if (!sb) throw new SyncError('Es sind keine Cloud-Zugangsdaten hinterlegt.')
-  const { data, error } = await sb.auth.getSession()
-  if (error) throw new SyncError(error.message)
-  if (!data.session) throw new SyncError('Nicht angemeldet.')
-  return { sb, userId: data.session.user.id }
+/* ------------------------------ Anmeldung ------------------------------ */
+
+export interface Account {
+  email: string
+  name: string
 }
+
+/** Tauscht Googles Token gegen eine Sitzung bei unserem Dienst. */
+export async function signInWithGoogle(credential: string): Promise<Account> {
+  try {
+    const r = await api<{ token: string; user: Account }>('/api/auth/google', {
+      method: 'POST',
+      body: { credential },
+      auth: false,
+    })
+    await setToken(r.token)
+    return r.user
+  } catch (e) {
+    throw wrap(e)
+  }
+}
+
+export async function currentAccount(): Promise<Account | null> {
+  try {
+    const r = await api<{ user: Account }>('/api/me')
+    return r.user
+  } catch {
+    return null
+  }
+}
+
+export async function signOut(): Promise<void> {
+  await clearToken()
+  forgetGoogleSession()
+}
+
+/* ------------------------------- Abgleich ------------------------------- */
 
 export async function syncAll(lastSyncAt: number | null): Promise<SyncResult> {
   if (!navigator.onLine) throw new SyncError('Offline – der Abgleich wird nachgeholt.')
-  const { sb, userId } = await requireSession()
-  const now = Date.now()
 
-  const [localPrompts, localCats, localCols] = await Promise.all([
+  const [prompts, categories, collections] = await Promise.all([
     db.getAll<Prompt>(STORES.prompts),
     db.getAll<Category>(STORES.categories),
     db.getAll<Collection>(STORES.collections),
   ])
 
-  /* ---- Kategorien und Sammlungen (einfacher Abgleich nach updated_at) ---- */
-  const catStats = await syncSimple(sb, userId, 'categories', localCats, STORES.categories)
-  const colStats = await syncSimple(sb, userId, 'collections', localCols, STORES.collections)
-
-  /* ---- Prompts ---- */
-  const { data: remoteRows, error } = await sb
-    .from('prompts')
-    .select('id, user_id, data, updated_at, deleted_at')
-    .eq('user_id', userId)
-  if (error) throw new SyncError(error.message)
-
-  const remote = new Map<string, RemotePrompt>((remoteRows ?? []).map((r) => [r.id, r as RemotePrompt]))
-  const localMap = new Map(localPrompts.map((p) => [p.id, p]))
-
-  const toUpsert: RemotePrompt[] = []
-  const toStoreLocally: Prompt[] = []
-  let conflicts = 0
-
-  for (const local of localPrompts) {
-    const rem = remote.get(local.id)
-    const localTs = local.updatedAt
-    if (!rem) {
-      toUpsert.push({
-        id: local.id,
-        user_id: userId,
-        data: local,
-        updated_at: toIso(localTs),
-        deleted_at: local.deletedAt ? toIso(local.deletedAt) : null,
-      })
-      continue
-    }
-    const remTs = fromIso(rem.updated_at)
-    if (localTs > remTs) {
-      toUpsert.push({
-        id: local.id,
-        user_id: userId,
-        data: local,
-        updated_at: toIso(localTs),
-        deleted_at: local.deletedAt ? toIso(local.deletedAt) : null,
-      })
-    } else if (remTs > localTs) {
-      const localChangedSinceSync = lastSyncAt != null && localTs > lastSyncAt
-      if (localChangedSinceSync && !local.deletedAt && !rem.deleted_at) {
-        // Beide Seiten geändert: beide Fassungen erhalten.
-        conflicts++
-        const kept = emptyPrompt({
-          ...local,
-          id: newId(),
-          title: `${local.title} (Konflikt, lokale Fassung)`,
-          updatedAt: now,
-          createdAt: now,
-        })
-        toStoreLocally.push(kept)
-        toUpsert.push({
-          id: kept.id,
-          user_id: userId,
-          data: kept,
-          updated_at: toIso(now),
-          deleted_at: null,
-        })
-      }
-      toStoreLocally.push(normalizeRemote(rem))
-    }
+  let res: SyncResponse
+  try {
+    res = await api<SyncResponse>('/api/sync', {
+      method: 'POST',
+      body: { lastSyncAt, prompts, categories, collections },
+    })
+  } catch (e) {
+    throw wrap(e)
   }
 
-  for (const [id, rem] of remote) {
-    if (!localMap.has(id)) toStoreLocally.push(normalizeRemote(rem))
-  }
+  const now = Date.now()
 
-  if (toUpsert.length) {
-    const { error: upErr } = await sb.from('prompts').upsert(toUpsert, { onConflict: 'id' })
-    if (upErr) throw new SyncError(upErr.message)
-  }
-  if (toStoreLocally.length) {
-    await db.putMany(STORES.prompts, toStoreLocally)
-  }
+  // Konflikte: die eigene Fassung als zusätzlichen Prompt bewahren, damit
+  // nichts stillschweigend verloren geht.
+  const conflictCopies: Prompt[] = (res.conflicts ?? []).map((p) =>
+    emptyPrompt({
+      ...p,
+      id: newId(),
+      title: `${p.title} (Konflikt, lokale Fassung)`,
+      createdAt: now,
+      updatedAt: now,
+    }),
+  )
 
-  /* ---- Bilder ---- */
-  const images = await db.getAll<StoredImage>(STORES.images)
-  let imagesUp = 0
-  for (const img of images) {
-    if (img.remotePath) continue
-    const path = `${userId}/${img.id}`
-    const { error: upErr } = await sb.storage
-      .from(IMAGE_BUCKET)
-      .upload(path, img.blob, { upsert: true, contentType: img.type })
-    if (!upErr) {
-      await db.putOne(STORES.images, { ...img, remotePath: path })
-      imagesUp++
-    }
+  if (res.prompts?.length) {
+    await db.putMany(STORES.prompts, res.prompts.map((p) => emptyPrompt(p)))
   }
+  if (conflictCopies.length) {
+    await db.putMany(STORES.prompts, conflictCopies)
+  }
+  if (res.categories?.length) await db.putMany(STORES.categories, res.categories)
+  if (res.collections?.length) await db.putMany(STORES.collections, res.collections)
 
-  let imagesDown = 0
-  const haveIds = new Set(images.map((i) => i.id))
-  const wantedIds = new Set<string>()
-  for (const p of toStoreLocally) p.imageIds.forEach((i) => wantedIds.add(i))
-  for (const id of wantedIds) {
-    if (haveIds.has(id)) continue
-    const path = `${userId}/${id}`
-    const { data: file, error: dlErr } = await sb.storage.from(IMAGE_BUCKET).download(path)
-    if (dlErr || !file) continue
-    const owner = toStoreLocally.find((p) => p.imageIds.includes(id))
-    await db.putOne(STORES.images, {
-      id,
-      promptId: owner?.id ?? '',
-      name: id,
-      type: file.type || 'image/jpeg',
-      size: file.size,
-      blob: file,
-      createdAt: Date.now(),
-      remotePath: path,
-    } as StoredImage)
-    imagesDown++
-  }
+  const images = await syncImages(res.prompts ?? [])
 
   return {
-    pushed: toUpsert.length + catStats.pushed + colStats.pushed,
-    pulled: toStoreLocally.length + catStats.pulled + colStats.pulled,
-    conflicts,
-    imagesUp,
-    imagesDown,
-    at: now,
+    pushed: res.pushed ?? 0,
+    pulled: res.pulled ?? 0,
+    conflicts: conflictCopies.length,
+    imagesUp: images.up,
+    imagesDown: images.down,
+    at: res.at ?? now,
   }
 }
 
-function normalizeRemote(rem: RemotePrompt): Prompt {
-  return emptyPrompt({
-    ...rem.data,
-    id: rem.id,
-    updatedAt: fromIso(rem.updated_at),
-    deletedAt: rem.deleted_at ? fromIso(rem.deleted_at) : null,
+/** Bilder werden getrennt übertragen – nur die, die noch fehlen. */
+async function syncImages(pulled: Prompt[]): Promise<{ up: number; down: number }> {
+  let up = 0
+  let down = 0
+
+  const local = await db.getAll<StoredImage>(STORES.images)
+  let remoteIds = new Set<string>()
+  try {
+    const r = await api<{ ids: string[] }>('/api/images')
+    remoteIds = new Set(r.ids)
+  } catch {
+    return { up, down }
+  }
+
+  for (const img of local) {
+    if (remoteIds.has(img.id)) continue
+    try {
+      const base64 = await blobToBase64(img.blob)
+      await api('/api/images/' + encodeURIComponent(img.id), {
+        method: 'POST',
+        body: {
+          base64,
+          promptId: img.promptId,
+          name: img.name,
+          type: img.type,
+          createdAt: img.createdAt,
+        },
+      })
+      up++
+    } catch {
+      /* Einzelne Bilder dürfen den Abgleich nicht scheitern lassen. */
+    }
+  }
+
+  const have = new Set(local.map((i) => i.id))
+  const wanted = new Set<string>()
+  pulled.forEach((p) => (p.imageIds ?? []).forEach((id) => wanted.add(id)))
+
+  for (const id of wanted) {
+    if (have.has(id)) continue
+    try {
+      const r = await api<{
+        promptId: string
+        name: string
+        type: string
+        createdAt: number
+        base64: string
+      }>('/api/images/' + encodeURIComponent(id))
+      const blob = base64ToBlob(r.base64, r.type)
+      await db.putOne(STORES.images, {
+        id,
+        promptId: r.promptId,
+        name: r.name,
+        type: r.type,
+        size: blob.size,
+        blob,
+        createdAt: r.createdAt,
+        remotePath: id,
+      } as StoredImage)
+      down++
+    } catch {
+      /* fehlendes Bild ist kein Grund, den Abgleich abzubrechen */
+    }
+  }
+
+  return { up, down }
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = String(reader.result)
+      resolve(result.slice(result.indexOf(',') + 1))
+    }
+    reader.onerror = () => reject(new Error('Bild konnte nicht gelesen werden.'))
+    reader.readAsDataURL(blob)
   })
 }
 
-interface SimpleRecord {
-  id: string
-  name: string
-  updatedAt: number
-  deletedAt: number | null
-}
-
-async function syncSimple(
-  sb: SupabaseClient,
-  userId: string,
-  table: 'categories' | 'collections',
-  local: SimpleRecord[],
-  store: (typeof STORES)[keyof typeof STORES],
-): Promise<{ pushed: number; pulled: number }> {
-  const { data, error } = await sb
-    .from(table)
-    .select('id, user_id, data, updated_at, deleted_at')
-    .eq('user_id', userId)
-  if (error) throw new SyncError(error.message)
-  const remote = new Map<string, { id: string; data: SimpleRecord; updated_at: string; deleted_at: string | null }>(
-    (data ?? []).map((r) => [r.id, r as never]),
-  )
-  const push: unknown[] = []
-  const pull: SimpleRecord[] = []
-  for (const rec of local) {
-    const rem = remote.get(rec.id)
-    if (!rem || fromIso(rem.updated_at) < rec.updatedAt) {
-      push.push({
-        id: rec.id,
-        user_id: userId,
-        data: rec,
-        updated_at: toIso(rec.updatedAt),
-        deleted_at: rec.deletedAt ? toIso(rec.deletedAt) : null,
-      })
-    } else if (fromIso(rem.updated_at) > rec.updatedAt) {
-      pull.push({ ...rem.data, id: rem.id, updatedAt: fromIso(rem.updated_at) })
-    }
-  }
-  const localIds = new Set(local.map((l) => l.id))
-  for (const [id, rem] of remote) {
-    if (!localIds.has(id)) pull.push({ ...rem.data, id, updatedAt: fromIso(rem.updated_at) })
-  }
-  if (push.length) {
-    const { error: e } = await sb.from(table).upsert(push as never, { onConflict: 'id' })
-    if (e) throw new SyncError(e.message)
-  }
-  if (pull.length) await db.putMany(store, pull as never)
-  return { pushed: push.length, pulled: pull.length }
-}
-
-/* --------------------------- Anmeldung --------------------------- */
-
-export async function signIn(email: string, password: string) {
-  const sb = await getSupabase()
-  if (!sb) throw new SyncError('Es sind keine Cloud-Zugangsdaten hinterlegt.')
-  const { data, error } = await sb.auth.signInWithPassword({ email, password })
-  if (error) throw new SyncError(uebersetze(error.message))
-  return data.user
-}
-
-export async function signUp(email: string, password: string) {
-  const sb = await getSupabase()
-  if (!sb) throw new SyncError('Es sind keine Cloud-Zugangsdaten hinterlegt.')
-  const { data, error } = await sb.auth.signUp({ email, password })
-  if (error) throw new SyncError(uebersetze(error.message))
-  return data.user
-}
-
-export async function signOut() {
-  const sb = await getSupabase()
-  if (!sb) return
-  await sb.auth.signOut()
-}
-
-export async function currentUser() {
-  const sb = await getSupabase()
-  if (!sb) return null
-  const { data } = await sb.auth.getUser()
-  return data.user ?? null
-}
-
-function uebersetze(message: string): string {
-  const m = message.toLowerCase()
-  if (m.includes('invalid login')) return 'E-Mail-Adresse oder Passwort stimmt nicht.'
-  if (m.includes('already registered')) return 'Für diese E-Mail-Adresse besteht bereits ein Konto.'
-  if (m.includes('password')) return 'Das Passwort erfüllt die Anforderungen nicht (mindestens 6 Zeichen).'
-  if (m.includes('email')) return 'Bitte eine gültige E-Mail-Adresse eingeben.'
-  return message
+function base64ToBlob(base64: string, type: string): Blob {
+  const bin = atob(base64)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  return new Blob([bytes], { type: type || 'image/jpeg' })
 }

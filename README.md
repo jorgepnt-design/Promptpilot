@@ -77,21 +77,33 @@ Erscheint später eine neue Fassung, meldet die App das mit einem Hinweisbalken;
 Ohne diese Einrichtung arbeitet PromptPilot vollständig lokal – alle übrigen Funktionen bleiben
 unverändert nutzbar.
 
-1. Ein kostenloses Projekt auf [supabase.com](https://supabase.com) anlegen.
-2. Im SQL-Editor den Inhalt von `supabase/schema.sql` ausführen. Das legt die Tabellen, die
-   Zugriffsregeln (Row Level Security) und den privaten Bilder-Bucket an.
-3. `.env.example` nach `.env` kopieren und die beiden Werte aus **Project Settings → API**
-   eintragen: `VITE_SUPABASE_URL` und `VITE_SUPABASE_ANON_KEY`.
-4. Für die Veröffentlichung dieselben zwei Werte als **Repository Secrets** hinterlegen.
-5. In der App unter **Einstellungen → Abgleich zwischen Geräten** ein Konto anlegen und abgleichen.
+Der Abgleich läuft über einen eigenen kleinen Dienst im Ordner `server/` (Node + PostgreSQL,
+ausgelegt für Render). Die Anmeldung erfolgt über „Über Google anmelden".
 
-> Der `service_role`-Key gehört niemals in das Frontend oder in ein Repository. Nur die beiden oben
-> genannten, ausdrücklich öffentlichen Werte werden verwendet; der eigentliche Schutz liegt in den
-> Row-Level-Security-Regeln der Datenbank.
+1. **Dienst bereitstellen.** Die `render.yaml` im Wurzelverzeichnis legt bei Render Web Service
+   und Datenbank in einem Schritt an (Blueprint). Der Dienst braucht vier Umgebungsvariablen:
+   `DATABASE_URL`, `JWT_SECRET` (mindestens 32 Zeichen), `GOOGLE_CLIENT_ID` und
+   `ALLOWED_ORIGINS` (die Adresse des Frontends).
+
+2. **Google-Kennung anlegen.** In der Google Cloud Console unter *Google Auth Platform*
+   einen OAuth-Client vom Typ *Webanwendung* erstellen. Als autorisierte JavaScript-Quelle die
+   Adresse des Frontends eintragen; Weiterleitungs-URIs werden nicht gebraucht. Solange die App
+   im Testmodus steht, müssen sich anmeldende Konten unter *Zielgruppe → Testnutzer* stehen.
+
+3. **Frontend verbinden.** `.env.example` nach `.env` kopieren und `VITE_API_URL` sowie
+   `VITE_GOOGLE_CLIENT_ID` eintragen. Für die Veröffentlichung dieselben zwei Werte bei Vercel
+   als Umgebungsvariablen hinterlegen.
+
+> Es wird ausschließlich die Client-ID verwendet, die ohnehin öffentlich ist. Ein Client-Secret
+> wird nicht benötigt: Der Browser holt das Token direkt bei Google, der Dienst prüft dessen
+> Signatur gegen Googles öffentliche Schlüssel und stellt danach eine eigene Sitzung aus.
 
 Wurden dieselben Daten auf zwei Geräten gleichzeitig geändert, gewinnt keine Seite stillschweigend:
-die abweichende Fassung bleibt als zusätzlicher Prompt mit dem Zusatz „(Konflikt, lokale Fassung)“
+die abweichende Fassung bleibt als zusätzlicher Prompt mit dem Zusatz „(Konflikt, lokale Fassung)"
 erhalten.
+
+Die Prüfungen des Dienstes laufen über `npm test` im Ordner `server/` und brauchen eine
+erreichbare PostgreSQL (`DATABASE_URL`).
 
 ## Wo die Daten liegen
 
@@ -112,6 +124,6 @@ src/
   pages/        Sammlungen, Einstellungen
   state/        Zentraler Zustand (Prompts, Kategorien, Sammlungen, Einstellungen)
 public/         Icons, Manifest, Service Worker
-supabase/       Datenbankschema mit Zugriffsregeln
+server/         Sync-Dienst (Node, PostgreSQL, Google-Anmeldung)
 tests/          Prüfungen der Kernlogik und der Oberfläche
 ```
