@@ -1,0 +1,24 @@
+# Blueprint für Render. Legt Dienst und Datenbank in einem Rutsch an.
+services:
+  - type: web
+    name: promptpilot-server
+    runtime: node
+    plan: starter
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: promptpilot-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+databases:
+  - name: promptpilot-db
+    plan: basic-256mb
