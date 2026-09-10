@@ -1,8 +1,11 @@
-# Blueprint für Render. Legt Dienst und Datenbank in einem Rutsch an.
+# Render-Blueprint für den PromptPilot-Sync-Dienst.
+# Das Frontend liegt im selben Repo und wird von Vercel gebaut; Render baut
+# ausschließlich den Ordner server/.
 services:
   - type: web
     name: promptpilot-server
     runtime: node
+    rootDir: server
     plan: starter
     buildCommand: npm ci
     startCommand: npm start
@@ -14,6 +17,7 @@ services:
           property: connectionString
       - key: JWT_SECRET
         generateValue: true
+      # Diese beiden trägst du nach dem ersten Anlegen selbst ein.
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: ALLOWED_ORIGINS
