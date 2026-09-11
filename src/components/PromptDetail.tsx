@@ -122,6 +122,9 @@ export function PromptDetail({
           </div>
         )}
 
+        <div className={images.length > 0 ? 'detail-split' : undefined}>
+          <div className="detail-main">
+
         <div className="detail-actions">
           {isTemplate && (
             <button className="btn btn-sm btn-primary" onClick={() => setTemplate(true)}>
@@ -208,23 +211,6 @@ export function PromptDetail({
           </div>
         )}
 
-        {images.length > 0 && (
-          <div className="section">
-            <h4>Bilder</h4>
-            <div className="thumbs">
-              {images.map((img) => {
-                const url = URL.createObjectURL(img.blob)
-                urls.current.push(url)
-                return (
-                  <div className="thumb" key={img.id} style={{ width: 120, height: 120 }}>
-                    <img src={url} alt={img.name} />
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
         <div className="section">
           <h4>Angaben</h4>
           <dl className="meta-table">
@@ -255,6 +241,24 @@ export function PromptDetail({
             <dt>Zuletzt verwendet</dt>
             <dd>{prompt.lastUsedAt ? new Date(prompt.lastUsedAt).toLocaleString('de-DE') : '–'}</dd>
           </dl>
+        </div>
+
+          </div>
+
+          {images.length > 0 && (
+            <aside className="detail-media">
+              <h4>Vorschau</h4>
+              {images.map((img) => {
+                const url = URL.createObjectURL(img.blob)
+                urls.current.push(url)
+                return (
+                  <figure className="preview" key={img.id}>
+                    <img src={url} alt={img.name} loading="lazy" />
+                  </figure>
+                )
+              })}
+            </aside>
+          )}
         </div>
       </Sheet>
 

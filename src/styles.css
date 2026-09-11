@@ -1456,3 +1456,41 @@ details.more > .more-body {
 .searchblock .search {
   margin-top: 0;
 }
+
+/* ===================== Detailansicht: Vorschau-Spalte ===================== */
+
+/* Auf schmalen Geräten bleibt alles untereinander; erst wenn Platz da ist,
+   wandert die Bildvorschau neben den Text. */
+.detail-media h4 {
+  margin: 0 0 10px;
+  font-size: var(--step--1);
+  color: var(--text-soft);
+}
+.detail-media .preview {
+  margin: 0 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--bg-soft);
+}
+.detail-media .preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+@media (min-width: 760px) {
+  .detail-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 260px;
+    gap: 26px;
+    align-items: start;
+  }
+  .detail-main {
+    min-width: 0;
+  }
+  .detail-media {
+    position: sticky;
+    top: 0;
+  }
+}
