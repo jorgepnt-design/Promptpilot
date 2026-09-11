@@ -1503,3 +1503,14 @@ details.more > .more-body {
   -webkit-mask-image: linear-gradient(to bottom, #000 65%, transparent 100%);
   mask-image: linear-gradient(to bottom, #000 65%, transparent 100%);
 }
+
+/* Der Knopf für neue Prompts ist auf schmalen Geräten überflüssig – dort
+   erledigt das der runde Knopf unten rechts. */
+.neuer-prompt {
+  display: none;
+}
+@media (min-width: 900px) {
+  .neuer-prompt {
+    display: inline-flex;
+  }
+}

@@ -425,6 +425,17 @@ export function PromptBrowser({
               Filter zurücksetzen
             </button>
           )}
+          {status === 'active' && (
+            // Auf dem Laptop ist der runde Knopf unten rechts ausgeblendet –
+            // ohne diesen hier gäbe es dort keinen Weg zu einem neuen Prompt.
+            <button
+              className="btn btn-sm btn-primary neuer-prompt"
+              onClick={() => route.setQueryParam('modus', 'neu')}
+              title="Neuer Prompt (Taste N)"
+            >
+              <IconPlus size={16} /> Neuer Prompt
+            </button>
+          )}
           {!selectionMode && results.length > 0 && (
             <button className="btn btn-sm" onClick={() => setSelectionMode(true)}>
               Auswählen
