@@ -34,6 +34,9 @@ export function PromptDetail({
   const [template, setTemplate] = useState(false)
   const [showVersions, setShowVersions] = useState(false)
   const [images, setImages] = useState<StoredImage[]>([])
+  const [offen, setOffen] = useState(false)
+  // Kurze Prompts bleiben immer offen – ein Knopf darüber wäre nur im Weg.
+  const lang = prompt.body.length > 420 || prompt.body.split('\n').length > 10
   const urls = useRef<string[]>([])
 
   const category = store.categories.find((c) => c.id === prompt.categoryId)
@@ -189,7 +192,17 @@ export function PromptDetail({
 
         <div className="section">
           <h4>Prompt</h4>
-          <pre className="prompt-text">{prompt.body}</pre>
+          <pre className={`prompt-text${lang && !offen ? ' is-collapsed' : ''}`}>{prompt.body}</pre>
+          {lang && (
+            <button
+              className="btn btn-sm"
+              style={{ marginTop: 8 }}
+              onClick={() => setOffen((v) => !v)}
+              aria-expanded={offen}
+            >
+              {offen ? 'Einklappen' : 'Ganzen Prompt anzeigen'}
+            </button>
+          )}
           <div className="counter">
             <span>{prompt.body.length.toLocaleString('de-DE')} Zeichen</span>
             <span>{countWords(prompt.body).toLocaleString('de-DE')} Wörter</span>

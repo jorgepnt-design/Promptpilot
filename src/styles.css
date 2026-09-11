@@ -1494,3 +1494,12 @@ details.more > .more-body {
     top: 0;
   }
 }
+
+/* Langer Prompt-Text lässt sich einklappen; der Verlauf am unteren Rand
+   zeigt, dass noch etwas folgt. */
+.prompt-text.is-collapsed {
+  max-height: 230px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 65%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 65%, transparent 100%);
+}
