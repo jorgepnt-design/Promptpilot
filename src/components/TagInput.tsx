@@ -66,7 +66,16 @@ export function TagInput({
       {open.length > 0 && (
         <div className="chips" style={{ margin: '8px 0 0', padding: 0 }}>
           {open.map((s) => (
-            <button type="button" key={s} className="chip" onClick={() => add(s)}>
+            <button
+              type="button"
+              key={s}
+              className="chip"
+              // Ohne dies verlässt das Eingabefeld beim Klick den Fokus, onBlur
+              // übernimmt den angefangenen Text, der Vorschlag verschwindet –
+              // und der Klick trifft nichts mehr.
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => add(s)}
+            >
               + {s}
             </button>
           ))}
