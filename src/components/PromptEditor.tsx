@@ -104,6 +104,19 @@ export function PromptEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prompt, dirty, draftKey])
 
+  const toolVorschlaege = useMemo(() => {
+    const q = prompt.tool.trim().toLowerCase()
+    if (!q) return []
+    const bekannt = new Set<string>(store.settings.tools)
+    store.prompts.forEach((p) => {
+      if (p.tool && !p.deletedAt) bekannt.add(p.tool)
+    })
+    return Array.from(bekannt)
+      .filter((t) => t.toLowerCase().includes(q) && t.toLowerCase() !== q)
+      .sort((a, b) => a.localeCompare(b, 'de'))
+      .slice(0, 5)
+  }, [prompt.tool, store.settings.tools, store.prompts])
+
   const patch = useCallback((p: Partial<Prompt>) => {
     setPrompt((cur) => ({ ...cur, ...p }))
     setDirty(true)
@@ -332,17 +345,27 @@ export function PromptEditor({
           <input
             id="pp-tool"
             className="input"
-            list="pp-tools"
             value={prompt.tool}
             onChange={(e) => patch({ tool: e.target.value })}
             placeholder="z. B. Midjourney"
             autoComplete="off"
           />
-          <datalist id="pp-tools">
-            {store.settings.tools.map((t) => (
-              <option key={t} value={t} />
-            ))}
-          </datalist>
+          {toolVorschlaege.length > 0 && (
+            <div className="chips" style={{ margin: '8px 0 0', padding: 0 }}>
+              {toolVorschlaege.map((t) => (
+                <button
+                  type="button"
+                  key={t}
+                  className="chip"
+                  // Fokuswechsel unterdrücken, sonst greift der Klick nicht.
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => patch({ tool: t })}
+                >
+                  + {t}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
