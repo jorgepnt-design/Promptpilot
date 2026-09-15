@@ -152,6 +152,18 @@ export default function App() {
             </div>
             <div className="spacer" />
             {pwa.offline && <span className="badge">Offline</span>}
+            {sync.verfuegbar && (
+              // Nur auf schmalen Geräten: am Laptop steht der Knopf in der Seitenleiste.
+              <button
+                className="icon-btn abgleich-mobil"
+                onClick={sync.abgleichen}
+                disabled={sync.laeuft}
+                aria-label={sync.laeuft ? 'Abgleich läuft' : 'Jetzt abgleichen'}
+                title="Jetzt abgleichen"
+              >
+                <IconCloud size={20} />
+              </button>
+            )}
             <SyncStatePill />
           </div>
         </header>

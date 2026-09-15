@@ -1556,3 +1556,16 @@ details.more > .more-body {
   padding-bottom: max(10px, env(safe-area-inset-bottom));
   text-align: center;
 }
+
+/* Abgleich-Knopf in der Kopfzeile: nur dort, wo die Seitenleiste fehlt. */
+.abgleich-mobil {
+  display: inline-flex;
+}
+.abgleich-mobil[disabled] {
+  opacity: 0.55;
+}
+@media (min-width: 900px) {
+  .abgleich-mobil {
+    display: none;
+  }
+}
