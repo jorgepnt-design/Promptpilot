@@ -1,4 +1,4 @@
-import type { Category, Collection, Prompt, StoredImage } from '../types'
+import type { Category, Collection, Note, Prompt, StoredImage } from '../types'
 import * as db from './db'
 import { STORES } from './db'
 import { emptyPrompt } from './defaults'
@@ -28,6 +28,7 @@ interface SyncResponse {
   prompts: Prompt[]
   categories: Category[]
   collections: Collection[]
+  notes: Note[]
   conflictRecords: Prompt[]
   pushed: number
   pulled: number
@@ -93,15 +94,16 @@ export async function syncAll(lastSyncAt: number | null): Promise<SyncResult> {
 async function runSync(lastSyncAt: number | null): Promise<SyncResult> {
   if (!navigator.onLine) throw new SyncError('Offline – der Abgleich wird nachgeholt.')
 
-  const [prompts, categories, collections] = await Promise.all([
+  const [prompts, categories, collections, notes] = await Promise.all([
     db.getAll<Prompt>(STORES.prompts),
     db.getAll<Category>(STORES.categories),
     db.getAll<Collection>(STORES.collections),
+    db.getAll<Note>(STORES.notes),
   ])
 
   const res = await api<SyncResponse>('/api/sync', {
     method: 'POST',
-    body: { lastSyncAt, prompts, categories, collections },
+    body: { lastSyncAt, prompts, categories, collections, notes },
   })
 
   const now = Date.now()
@@ -126,6 +128,7 @@ async function runSync(lastSyncAt: number | null): Promise<SyncResult> {
   }
   if (res.categories?.length) await db.putMany(STORES.categories, res.categories)
   if (res.collections?.length) await db.putMany(STORES.collections, res.collections)
+  if (res.notes?.length) await db.putMany(STORES.notes, res.notes)
 
   const images = await syncImages(res.prompts ?? [])
 

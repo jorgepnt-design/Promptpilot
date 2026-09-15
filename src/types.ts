@@ -126,3 +126,15 @@ export type SyncState =
   | 'offline-pending'
   | 'error'
   | 'disabled'
+
+/** Freie Notiz: Überschrift und Text, unabhängig von Prompts. */
+export interface Note {
+  id: ID
+  title: string
+  body: string
+  tags: string[]
+  favorite: boolean
+  createdAt: number
+  updatedAt: number
+  deletedAt: number | null
+}

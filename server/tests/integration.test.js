@@ -27,7 +27,7 @@ const verifyGoogle = async (credential) => {
 }
 
 const pool = createPool(DB)
-await pool.query(`drop table if exists pp_images, pp_prompts, pp_categories, pp_collections, pp_users cascade`)
+await pool.query(`drop table if exists pp_images, pp_prompts, pp_categories, pp_collections, pp_notes, pp_users cascade`)
 await migrate(pool)
 
 const app = createApp({ pool, verifyGoogle })
@@ -198,12 +198,42 @@ await test('Antwort enthält überall Listen, nie Zahlen', async () => {
     token: tokenA,
     body: { lastSyncAt: null, prompts: [], categories: [], collections: [] },
   })
-  for (const feld of ['prompts', 'categories', 'collections', 'conflictRecords']) {
+  for (const feld of ['prompts', 'categories', 'collections', 'notes', 'conflictRecords']) {
     assert.ok(Array.isArray(r.body[feld]), `${feld} ist keine Liste, sondern ${typeof r.body[feld]}`)
   }
   for (const feld of ['pushed', 'pulled', 'conflicts', 'at']) {
     assert.equal(typeof r.body[feld], 'number', `${feld} ist keine Zahl`)
   }
+})
+
+await test('Notizen werden abgeglichen', async () => {
+  const notiz = { id: 'n1', title: 'Bessere Bildprompts', body: 'Licht zuerst beschreiben.',
+                  tags: ['Tipp'], favorite: false, updatedAt: 7000, deletedAt: null }
+  const hoch = await call('/api/sync', {
+    method: 'POST', token: tokenA,
+    body: { lastSyncAt: null, prompts: [], categories: [], collections: [], notes: [notiz] },
+  })
+  assert.equal(hoch.status, 200)
+  const runter = await call('/api/sync', {
+    method: 'POST', token: tokenA,
+    body: { lastSyncAt: null, prompts: [], categories: [], collections: [], notes: [] },
+  })
+  const n = runter.body.notes.find((x) => x.id === 'n1')
+  assert.ok(n, 'Notiz kam nicht zurück')
+  assert.equal(n.title, 'Bessere Bildprompts')
+  assert.equal(n.body, 'Licht zuerst beschreiben.', 'Text verändert')
+  assert.deepEqual(n.tags, ['Tipp'])
+})
+
+await test('Fremdes Konto sieht keine fremden Notizen', async () => {
+  const r = await call('/api/sync', {
+    method: 'POST', token: tokenB || (await (async () => {
+      const a = await call('/api/auth/google', { method: 'POST', body: { credential: 'google:fremde2:f2@example.com' } })
+      return a.body.token
+    })()),
+    body: { lastSyncAt: null, prompts: [], categories: [], collections: [], notes: [] },
+  })
+  assert.equal((r.body.notes || []).length, 0, 'Datenleck bei Notizen')
 })
 
 await test('Bild hochladen und zurückholen', async () => {

@@ -13,6 +13,7 @@ import type {
   Collection,
   Draft,
   ID,
+  Note,
   Prompt,
   PromptVersion,
   Settings,
@@ -26,6 +27,7 @@ import {
   FALLBACK_CATEGORY_ID,
   buildDefaultCategories,
   buildExamplePrompts,
+  emptyNote,
   emptyPrompt,
 } from '../lib/defaults'
 import { newId } from '../lib/id'
@@ -48,6 +50,7 @@ interface StoreValue {
   prompts: Prompt[]
   categories: Category[]
   collections: Collection[]
+  notes: Note[]
   settings: Settings
   index: SearchIndex
   toasts: Toast[]
@@ -74,6 +77,10 @@ interface StoreValue {
   addCategory: (name: string) => Promise<Category | null>
   renameCategory: (id: ID, name: string) => Promise<void>
   deleteCategory: (id: ID, moveToId: ID | null) => Promise<void>
+
+  saveNote: (patch: Partial<Note> & { id?: ID }) => Promise<Note>
+  deleteNote: (id: ID) => Promise<void>
+  toggleNoteFavorite: (id: ID) => Promise<void>
 
   addCollection: (name: string, description?: string) => Promise<Collection | null>
   renameCollection: (id: ID, name: string, description?: string) => Promise<void>
@@ -155,6 +162,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [prompts, setPrompts] = useState<Prompt[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [collections, setCollections] = useState<Collection[]>([])
+  const [notes, setNotes] = useState<Note[]>([])
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [manualCopy, setManualCopy] = useState<string | null>(null)
@@ -196,6 +204,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSettings(merged)
     setCategories(cats.sort((a, b) => a.order - b.order))
     setCollections(storedCols.filter((c) => !c.deletedAt))
+    const storedNotes = await db.getAll<Note>(STORES.notes)
+    setNotes(storedNotes.filter((n) => !n.deletedAt).map((n) => emptyNote(n)))
     // Ältere Datensätze auf das aktuelle Feldschema heben, ohne Inhalte zu verändern.
     setPrompts(storedPrompts.filter((p) => !p.deletedAt).map((p) => emptyPrompt(p)))
     setStorageWarning(db.isMemoryMode())
@@ -420,6 +430,43 @@ export function AppProvider({ children }: { children: ReactNode }) {
   )
 
   /* ---------------- Sammlungen ---------------- */
+
+  /* ------------------------------- Notizen ------------------------------- */
+
+  const saveNote = useCallback(async (patch: Partial<Note> & { id?: ID }) => {
+    const now = Date.now()
+    const vorhanden = patch.id ? await db.getOne<Note>(STORES.notes, patch.id) : undefined
+    const next: Note = emptyNote({
+      ...(vorhanden ?? {}),
+      ...patch,
+      title: (patch.title ?? vorhanden?.title ?? '').trim(),
+      updatedAt: now,
+      createdAt: vorhanden?.createdAt ?? now,
+    })
+    await db.putOne(STORES.notes, next)
+    setNotes((list) => {
+      const ohne = list.filter((n) => n.id !== next.id)
+      return [next, ...ohne]
+    })
+    return next
+  }, [])
+
+  /** Löschen hinterlässt einen Tombstone, damit der Abgleich es mitbekommt. */
+  const deleteNote = useCallback(async (id: ID) => {
+    const vorhanden = await db.getOne<Note>(STORES.notes, id)
+    if (vorhanden) {
+      await db.putOne(STORES.notes, { ...vorhanden, deletedAt: Date.now(), updatedAt: Date.now() })
+    }
+    setNotes((list) => list.filter((n) => n.id !== id))
+  }, [])
+
+  const toggleNoteFavorite = useCallback(async (id: ID) => {
+    const vorhanden = await db.getOne<Note>(STORES.notes, id)
+    if (!vorhanden) return
+    const next = { ...vorhanden, favorite: !vorhanden.favorite, updatedAt: Date.now() }
+    await db.putOne(STORES.notes, next)
+    setNotes((list) => list.map((n) => (n.id === id ? next : n)))
+  }, [])
 
   const addCollection = useCallback(
     async (name: string, description = '') => {
@@ -673,6 +720,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     prompts,
     categories,
     collections,
+    notes,
+    saveNote,
+    deleteNote,
+    toggleNoteFavorite,
     settings,
     index,
     toasts,

@@ -89,7 +89,12 @@ function auth(req, res, next) {
 
 /* ------------------------------ Abgleich ------------------------------ */
 
-const KINDS = { prompts: 'pp_prompts', categories: 'pp_categories', collections: 'pp_collections' }
+const KINDS = {
+  prompts: 'pp_prompts',
+  categories: 'pp_categories',
+  collections: 'pp_collections',
+  notes: 'pp_notes',
+}
 
 function num(v) {
   return typeof v === 'number' && Number.isFinite(v) ? v : 0

@@ -4,6 +4,7 @@ import { useRoute } from './lib/router'
 import { usePwa } from './lib/pwa'
 import { PromptBrowser } from './components/PromptBrowser'
 import { CollectionsPage } from './pages/CollectionsPage'
+import { NotesPage } from './pages/NotesPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ToastHost, useConfirm } from './components/ui'
 import { SyncStatePill } from './components/SyncPanel'
@@ -12,6 +13,7 @@ import {
   IconCollections,
   IconLibrary,
   IconSettings,
+  IconStack,
   IconStar,
   IconTrash,
   LogoMark,
@@ -21,6 +23,7 @@ const NAV = [
   { path: '/bibliothek', label: 'Bibliothek', icon: IconLibrary },
   { path: '/favoriten', label: 'Favoriten', icon: IconStar },
   { path: '/sammlungen', label: 'Sammlungen', icon: IconCollections },
+  { path: '/notizen', label: 'Notizen', icon: IconStack },
   { path: '/einstellungen', label: 'Einstellungen', icon: IconSettings },
 ]
 
@@ -70,6 +73,7 @@ export default function App() {
       '/bibliothek': counts.active,
       '/favoriten': counts.favorites,
       '/sammlungen': counts.collections,
+      '/notizen': store.notes.length,
       '/archiv': counts.archived,
       '/papierkorb': counts.trashed,
     })[path]
@@ -187,6 +191,8 @@ function Routes({ path }: { path: string }) {
       )
     case '/sammlungen':
       return <CollectionsPage />
+    case '/notizen':
+      return <NotesPage />
     case '/einstellungen':
       return <SettingsPage />
     case '/archiv':

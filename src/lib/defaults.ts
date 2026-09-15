@@ -1,4 +1,4 @@
-import type { Category, Prompt, Settings } from '../types'
+import type { Category, Note, Prompt, Settings } from '../types'
 import { newId } from './id'
 
 export const DEFAULT_CATEGORY_NAMES = [
@@ -61,6 +61,21 @@ export function slug(s: string): string {
     .replace(/ß/g, 'ss')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
+}
+
+export function emptyNote(partial: Partial<Note> = {}): Note {
+  const now = Date.now()
+  return {
+    id: newId(),
+    title: '',
+    body: '',
+    tags: [],
+    favorite: false,
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null,
+    ...partial,
+  }
 }
 
 export function emptyPrompt(partial: Partial<Prompt> = {}): Prompt {

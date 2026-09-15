@@ -9,13 +9,14 @@
  */
 
 export const DB_NAME = 'promptpilot'
-export const DB_VERSION = 2
+export const DB_VERSION = 3
 
 export const STORES = {
   prompts: 'prompts',
   categories: 'categories',
   collections: 'collections',
   images: 'images',
+  notes: 'notes',
   meta: 'meta',
 } as const
 
@@ -30,6 +31,7 @@ const memory: Record<string, Map<string, unknown>> = {
   categories: new Map(),
   collections: new Map(),
   images: new Map(),
+  notes: new Map(),
   meta: new Map(),
 }
 
@@ -68,6 +70,10 @@ function openDatabase(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORES.images)) {
         const s = db.createObjectStore(STORES.images, { keyPath: 'id' })
         s.createIndex('promptId', 'promptId')
+      }
+      if (!db.objectStoreNames.contains(STORES.notes)) {
+        const s = db.createObjectStore(STORES.notes, { keyPath: 'id' })
+        s.createIndex('updatedAt', 'updatedAt')
       }
       if (!db.objectStoreNames.contains(STORES.meta)) {
         db.createObjectStore(STORES.meta, { keyPath: 'key' })
