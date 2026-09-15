@@ -130,7 +130,7 @@ async function runSync(lastSyncAt: number | null): Promise<SyncResult> {
   if (res.collections?.length) await db.putMany(STORES.collections, res.collections)
   if (res.notes?.length) await db.putMany(STORES.notes, res.notes)
 
-  const images = await syncImages(res.prompts ?? [])
+  const images = await syncImages(res.prompts ?? [], res.notes ?? [])
 
   return {
     pushed: res.pushed ?? 0,
@@ -143,7 +143,10 @@ async function runSync(lastSyncAt: number | null): Promise<SyncResult> {
 }
 
 /** Bilder werden getrennt übertragen – nur die, die noch fehlen. */
-async function syncImages(pulled: Prompt[]): Promise<{ up: number; down: number }> {
+async function syncImages(
+  pulled: Prompt[],
+  pulledNotes: Note[] = [],
+): Promise<{ up: number; down: number }> {
   let up = 0
   let down = 0
 
@@ -179,6 +182,7 @@ async function syncImages(pulled: Prompt[]): Promise<{ up: number; down: number 
   const have = new Set(local.map((i) => i.id))
   const wanted = new Set<string>()
   pulled.forEach((p) => (p.imageIds ?? []).forEach((id) => wanted.add(id)))
+  pulledNotes.forEach((n) => (n.imageIds ?? []).forEach((id) => wanted.add(id)))
 
   for (const id of wanted) {
     if (have.has(id)) continue

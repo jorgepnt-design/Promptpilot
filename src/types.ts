@@ -133,6 +133,7 @@ export interface Note {
   title: string
   body: string
   tags: string[]
+  imageIds: ID[]
   favorite: boolean
   createdAt: number
   updatedAt: number

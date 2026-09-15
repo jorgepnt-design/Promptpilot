@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { Note } from '../types'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { Note, StoredImage } from '../types'
 import { useStore } from '../state/store'
 import { useRoute } from '../lib/router'
 import { Sheet, useConfirm } from '../components/ui'
 import { TagInput } from '../components/TagInput'
-import { IconEdit, IconPlus, IconStar, IconTrash } from '../components/Icons'
+import { IconClose, IconEdit, IconImage, IconPlus, IconStar, IconTrash } from '../components/Icons'
+import { ImageError, MAX_IMAGES_PER_PROMPT, prepareImage } from '../lib/images'
 
 type Sortierung = 'geaendert' | 'erstellt' | 'alpha'
 
@@ -27,12 +28,86 @@ export function NotesPage() {
   const [sortierung, setSortierung] = useState<Sortierung>('geaendert')
   const [entwurf, setEntwurf] = useState<Partial<Note> | null>(null)
   const [offeneNotiz, setOffeneNotiz] = useState<Note | null>(null)
+  const [bilder, setBilder] = useState<StoredImage[]>([])
+  const [bildFehler, setBildFehler] = useState<string | null>(null)
+  const dateiRef = useRef<HTMLInputElement>(null)
+  const urls = useRef<string[]>([])
 
   const modus = route.query.get('modus')
 
   useEffect(() => {
     if (modus === 'neu' && !entwurf) setEntwurf({ title: '', body: '', tags: [] })
   }, [modus, entwurf])
+
+  /* Bilder des offenen Datensatzes laden und Objekt-URLs wieder freigeben. */
+  useEffect(() => {
+    const ids = entwurf?.imageIds ?? offeneNotiz?.imageIds ?? []
+    let aktiv = true
+    urls.current.forEach((u) => URL.revokeObjectURL(u))
+    urls.current = []
+    if (!ids.length) {
+      setBilder([])
+      return
+    }
+    store.getImages(ids).then((imgs) => {
+      if (aktiv) setBilder(imgs)
+    })
+    return () => {
+      aktiv = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [(entwurf?.imageIds ?? []).join(','), (offeneNotiz?.imageIds ?? []).join(',')])
+
+  useEffect(() => () => urls.current.forEach((u) => URL.revokeObjectURL(u)), [])
+
+  const bildUrl = useCallback((img: StoredImage) => {
+    const u = URL.createObjectURL(img.blob)
+    urls.current.push(u)
+    return u
+  }, [])
+
+  const bilderHinzufuegen = useCallback(
+    async (files: FileList | null) => {
+      if (!files?.length || !entwurf) return
+      setBildFehler(null)
+      const vorhanden = entwurf.imageIds ?? []
+      const frei = MAX_IMAGES_PER_PROMPT - vorhanden.length
+      if (frei <= 0) {
+        setBildFehler(`Es sind höchstens ${MAX_IMAGES_PER_PROMPT} Bilder je Notiz möglich.`)
+        return
+      }
+      // Die Notiz braucht eine ID, bevor Bilder daran hängen können.
+      const id = entwurf.id ?? (await store.saveNote({ ...entwurf, title: entwurf.title || 'Ohne Titel' })).id
+      const fertig: StoredImage[] = []
+      for (const f of Array.from(files).slice(0, frei)) {
+        try {
+          fertig.push(await prepareImage(f, id))
+        } catch (err) {
+          setBildFehler(
+            err instanceof ImageError ? err.message : `„${f.name}“ konnte nicht gelesen werden.`,
+          )
+        }
+      }
+      if (!fertig.length) return
+      await store.addImages(id, fertig)
+      setEntwurf((cur) =>
+        cur ? { ...cur, id, imageIds: [...(cur.imageIds ?? []), ...fertig.map((i) => i.id)] } : cur,
+      )
+      if (dateiRef.current) dateiRef.current.value = ''
+    },
+    [entwurf, store],
+  )
+
+  const bildEntfernen = useCallback(
+    async (imgId: string) => {
+      if (!entwurf?.id) return
+      await store.removeImage(entwurf.id, imgId)
+      setEntwurf((cur) =>
+        cur ? { ...cur, imageIds: (cur.imageIds ?? []).filter((i) => i !== imgId) } : cur,
+      )
+    },
+    [entwurf, store],
+  )
 
   const schliessen = useCallback(() => {
     setEntwurf(null)
@@ -189,6 +264,12 @@ export function NotesPage() {
                 {note.body.slice(0, 220)}
                 {note.body.length > 220 ? ' …' : ''}
               </p>
+              {(note.imageIds ?? []).length > 0 && (
+                <div className="hint" style={{ marginTop: 4 }}>
+                  <IconImage size={14} /> {note.imageIds.length}{' '}
+                  {note.imageIds.length === 1 ? 'Bild' : 'Bilder'}
+                </div>
+              )}
               {note.tags.length > 0 && (
                 <div className="chips" style={{ padding: 0, margin: '6px 0 0' }}>
                   {note.tags.map((t) => (
@@ -253,6 +334,15 @@ export function NotesPage() {
           }
         >
           <pre className="prompt-text">{offeneNotiz.body}</pre>
+          {bilder.length > 0 && (
+            <div className="thumbs" style={{ marginTop: 14 }}>
+              {bilder.map((img) => (
+                <figure className="preview" key={img.id} style={{ margin: 0, maxWidth: 260 }}>
+                  <img src={bildUrl(img)} alt={img.name} loading="lazy" />
+                </figure>
+              ))}
+            </div>
+          )}
           {offeneNotiz.tags.length > 0 && (
             <div className="chips" style={{ padding: 0, marginTop: 12 }}>
               {offeneNotiz.tags.map((t) => (
@@ -313,6 +403,45 @@ export function NotesPage() {
               placeholder="Tipp, Merksatz, Vorgehen …"
             />
           </div>
+          <div className="field">
+            <label>Bilder</label>
+            <input
+              ref={dateiRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => bilderHinzufuegen(e.target.files)}
+              style={{ display: 'none' }}
+            />
+            <button
+              className="btn btn-sm"
+              onClick={() => dateiRef.current?.click()}
+              disabled={(entwurf.imageIds ?? []).length >= MAX_IMAGES_PER_PROMPT}
+            >
+              <IconImage size={16} /> Bilder hinzufügen
+            </button>
+            <div className="hint" style={{ marginTop: 6 }}>
+              Höchstens {MAX_IMAGES_PER_PROMPT} Bilder, je 8 MB. Große Bilder werden verkleinert.
+            </div>
+            {bildFehler && <div className="notice notice-warn">{bildFehler}</div>}
+            {bilder.length > 0 && (
+              <div className="thumbs" style={{ marginTop: 10 }}>
+                {bilder.map((img) => (
+                  <div className="thumb" key={img.id} style={{ width: 96, height: 96 }}>
+                    <img src={bildUrl(img)} alt={img.name} />
+                    <button
+                      type="button"
+                      onClick={() => bildEntfernen(img.id)}
+                      aria-label={`${img.name} entfernen`}
+                    >
+                      <IconClose size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="field">
             <label htmlFor="notiz-tags">Tags</label>
             <TagInput

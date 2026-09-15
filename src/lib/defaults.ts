@@ -70,6 +70,7 @@ export function emptyNote(partial: Partial<Note> = {}): Note {
     title: '',
     body: '',
     tags: [],
+    imageIds: [],
     favorite: false,
     createdAt: now,
     updatedAt: now,
