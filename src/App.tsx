@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { useStore } from './state/store'
 import { useRoute } from './lib/router'
 import { usePwa } from './lib/pwa'
+import { useAbgleich } from './lib/useSync'
 import { PromptBrowser } from './components/PromptBrowser'
 import { CollectionsPage } from './pages/CollectionsPage'
 import { NotesPage } from './pages/NotesPage'
@@ -12,6 +13,7 @@ import {
   IconArchive,
   IconCollections,
   IconLibrary,
+  IconCloud,
   IconSettings,
   IconStack,
   IconStar,
@@ -36,6 +38,7 @@ export default function App() {
   const store = useStore()
   const route = useRoute()
   const pwa = usePwa()
+  const sync = useAbgleich()
 
   /* Farbschema anwenden und der Systemeinstellung folgen */
   useEffect(() => {
@@ -124,6 +127,18 @@ export default function App() {
           </a>
         ))}
         <div style={{ marginTop: 'auto', padding: '16px 10px 0' }}>
+          {sync.verfuegbar && (
+            <button
+              className="btn btn-sm"
+              style={{ width: '100%', marginBottom: 10 }}
+              onClick={sync.abgleichen}
+              disabled={sync.laeuft}
+              title="Prompts, Notizen und Bilder mit den anderen Geräten abgleichen"
+            >
+              <IconCloud size={16} />
+              {sync.laeuft ? 'Abgleich läuft …' : 'Jetzt abgleichen'}
+            </button>
+          )}
           <SyncStatePill />
         </div>
       </aside>
