@@ -4,6 +4,7 @@ import { useStore } from '../state/store'
 import { useRoute } from '../lib/router'
 import { Sheet, useConfirm } from '../components/ui'
 import { TagInput } from '../components/TagInput'
+import { ImageViewer } from '../components/ImageViewer'
 import { IconClose, IconEdit, IconImage, IconPlus, IconStar, IconTrash } from '../components/Icons'
 import { ImageError, MAX_IMAGES_PER_PROMPT, prepareImage } from '../lib/images'
 
@@ -30,6 +31,7 @@ export function NotesPage() {
   const [offeneNotiz, setOffeneNotiz] = useState<Note | null>(null)
   const [bilder, setBilder] = useState<StoredImage[]>([])
   const [bildFehler, setBildFehler] = useState<string | null>(null)
+  const [grossesBild, setGrossesBild] = useState<{ src: string; alt: string } | null>(null)
   const dateiRef = useRef<HTMLInputElement>(null)
   const urls = useRef<string[]>([])
 
@@ -338,7 +340,13 @@ export function NotesPage() {
             <div className="thumbs" style={{ marginTop: 14 }}>
               {bilder.map((img) => (
                 <figure className="preview" key={img.id} style={{ margin: 0, maxWidth: 260 }}>
-                  <img src={bildUrl(img)} alt={img.name} loading="lazy" />
+                  <img
+                    src={bildUrl(img)}
+                    alt={img.name}
+                    loading="lazy"
+                    style={{ cursor: 'zoom-in' }}
+                    onClick={() => setGrossesBild({ src: bildUrl(img), alt: img.name })}
+                  />
                 </figure>
               ))}
             </div>
@@ -452,6 +460,22 @@ export function NotesPage() {
             />
           </div>
         </Sheet>
+      )}
+
+      <button
+        className="fab"
+        onClick={() => setEntwurf({ title: '', body: '', tags: [], imageIds: [] })}
+        aria-label="Neue Notiz erstellen"
+      >
+        <IconPlus size={26} />
+      </button>
+
+      {grossesBild && (
+        <ImageViewer
+          src={grossesBild.src}
+          alt={grossesBild.alt}
+          onClose={() => setGrossesBild(null)}
+        />
       )}
 
       {confirm.element}

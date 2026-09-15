@@ -1,3 +1,4 @@
+import { ImageViewer } from './ImageViewer'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Prompt, StoredImage } from '../types'
 import { useStore } from '../state/store'
@@ -35,6 +36,7 @@ export function PromptDetail({
   const [showVersions, setShowVersions] = useState(false)
   const [images, setImages] = useState<StoredImage[]>([])
   const [offen, setOffen] = useState(false)
+  const [grossesBild, setGrossesBild] = useState<{ src: string; alt: string } | null>(null)
   // Kurze Prompts bleiben immer offen – ein Knopf darüber wäre nur im Weg.
   const lang = prompt.body.length > 420 || prompt.body.split('\n').length > 10
   const urls = useRef<string[]>([])
@@ -266,7 +268,13 @@ export function PromptDetail({
                 urls.current.push(url)
                 return (
                   <figure className="preview" key={img.id}>
-                    <img src={url} alt={img.name} loading="lazy" />
+                    <img
+                      src={url}
+                      alt={img.name}
+                      loading="lazy"
+                      style={{ cursor: 'zoom-in' }}
+                      onClick={() => setGrossesBild({ src: url, alt: img.name })}
+                    />
                   </figure>
                 )
               })}
@@ -274,6 +282,9 @@ export function PromptDetail({
           )}
         </div>
       </Sheet>
+      {grossesBild && (
+        <ImageViewer src={grossesBild.src} alt={grossesBild.alt} onClose={() => setGrossesBild(null)} />
+      )}
 
       {menu.anchor && <Menu items={menuItems} anchor={menu.anchor} onClose={menu.close} />}
       {template && <TemplateFiller prompt={prompt} onClose={() => setTemplate(false)} />}
