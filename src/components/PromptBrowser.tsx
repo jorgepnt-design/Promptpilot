@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Filters, Prompt, PromptStatus } from '../types'
 import { useStore } from '../state/store'
+import { toolList } from '../lib/tools'
 import { filterPrompts, tokenize } from '../lib/search'
 import { buildMarkdown, buildPlainText, buildJsonBackup, jsonBlob } from '../lib/exportImport'
 import { downloadBlob, timestampName } from '../lib/clipboard'
@@ -144,7 +145,9 @@ export function PromptBrowser({
 
   const tools = useMemo(() => {
     const set = new Set<string>()
-    store.prompts.filter((p) => p.status === status && p.tool).forEach((p) => set.add(p.tool))
+    store.prompts
+      .filter((p) => p.status === status && p.tool)
+      .forEach((p) => toolList(p.tool).forEach((t) => set.add(t)))
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'de'))
   }, [store.prompts, status])
 

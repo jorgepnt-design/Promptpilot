@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Prompt, StoredImage } from '../types'
 import { useStore } from '../state/store'
+import { toolList, toolString } from '../lib/tools'
 import { emptyPrompt } from '../lib/defaults'
 import { countWords } from '../lib/search'
 import { safeUrl } from '../lib/exportImport'
@@ -104,18 +105,15 @@ export function PromptEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prompt, dirty, draftKey])
 
+  /* Bekannte Werkzeuge: die voreingestellten plus alles, was in anderen
+     Prompts schon vorkommt. */
   const toolVorschlaege = useMemo(() => {
-    const q = prompt.tool.trim().toLowerCase()
-    if (!q) return []
     const bekannt = new Set<string>(store.settings.tools)
     store.prompts.forEach((p) => {
-      if (p.tool && !p.deletedAt) bekannt.add(p.tool)
+      if (!p.deletedAt) toolList(p.tool).forEach((t) => bekannt.add(t))
     })
-    return Array.from(bekannt)
-      .filter((t) => t.toLowerCase().includes(q) && t.toLowerCase() !== q)
-      .sort((a, b) => a.localeCompare(b, 'de'))
-      .slice(0, 5)
-  }, [prompt.tool, store.settings.tools, store.prompts])
+    return Array.from(bekannt).sort((a, b) => a.localeCompare(b, 'de'))
+  }, [store.settings.tools, store.prompts])
 
   const patch = useCallback((p: Partial<Prompt>) => {
     setPrompt((cur) => ({ ...cur, ...p }))
@@ -342,30 +340,16 @@ export function PromptEditor({
         </div>
         <div className="field">
           <label htmlFor="pp-tool">KI-Tool oder Modell</label>
-          <input
+          <TagInput
             id="pp-tool"
-            className="input"
-            value={prompt.tool}
-            onChange={(e) => patch({ tool: e.target.value })}
-            placeholder="z. B. Midjourney"
-            autoComplete="off"
+            value={toolList(prompt.tool)}
+            onChange={(liste) => patch({ tool: toolString(liste) })}
+            suggestions={toolVorschlaege}
+
           />
-          {toolVorschlaege.length > 0 && (
-            <div className="chips" style={{ margin: '8px 0 0', padding: 0 }}>
-              {toolVorschlaege.map((t) => (
-                <button
-                  type="button"
-                  key={t}
-                  className="chip"
-                  // Fokuswechsel unterdrücken, sonst greift der Klick nicht.
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => patch({ tool: t })}
-                >
-                  + {t}
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="hint" style={{ marginTop: 6 }}>
+            Mehrere möglich – der Filter findet den Prompt dann unter jedem davon.
+          </div>
         </div>
       </div>
 

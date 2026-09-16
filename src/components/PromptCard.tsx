@@ -2,6 +2,7 @@ import { memo } from 'react'
 import type { Prompt, ViewMode } from '../types'
 import { highlight, snippet } from '../lib/search'
 import { useStore } from '../state/store'
+import { toolList } from '../lib/tools'
 import { CardThumb } from './CardThumb'
 import { Menu, useMenu } from './ui'
 import {
@@ -126,7 +127,11 @@ function PromptCardInner({
   const meta = (
     <div className="card-meta">
       {categoryName && <span className="badge">{categoryName}</span>}
-      {prompt.tool && <span className="badge badge-accent">{prompt.tool}</span>}
+      {toolList(prompt.tool).map((t) => (
+        <span className="badge badge-accent" key={t}>
+          {t}
+        </span>
+      ))}
       {isTemplate && <span className="badge">Vorlage</span>}
       {(prompt.imageIds ?? []).length > 0 && (
         <span

@@ -1,3 +1,4 @@
+import { toolList } from './tools'
 import type { Category, Filters, Prompt, SortMode } from '../types'
 
 /** Zerlegt die Eingabe in Suchbegriffe; Anführungszeichen halten Wortgruppen zusammen. */
@@ -56,7 +57,7 @@ export function filterPrompts({ prompts, filters, sort, index, status }: FilterO
     if (filters.withImagesOnly && !(p.imageIds ?? []).length) return false
     if (filters.categoryId && p.categoryId !== filters.categoryId) return false
     if (filters.collectionId && !p.collectionIds.includes(filters.collectionId)) return false
-    if (filters.tool && p.tool !== filters.tool) return false
+    if (filters.tool && !toolList(p.tool).includes(filters.tool)) return false
     if (filters.language && p.language !== filters.language) return false
     if (filters.tags.length && !filters.tags.every((t) => p.tags.includes(t))) return false
     if (terms.length) {
