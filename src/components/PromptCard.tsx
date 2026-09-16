@@ -8,6 +8,7 @@ import {
   IconCopy,
   IconDuplicate,
   IconEdit,
+  IconImage,
   IconMore,
   IconRestore,
   IconStar,
@@ -126,6 +127,14 @@ function PromptCardInner({
       {categoryName && <span className="badge">{categoryName}</span>}
       {prompt.tool && <span className="badge badge-accent">{prompt.tool}</span>}
       {isTemplate && <span className="badge">Vorlage</span>}
+      {(prompt.imageIds ?? []).length > 0 && (
+        <span
+          className="badge"
+          title={`${prompt.imageIds.length} ${prompt.imageIds.length === 1 ? 'Bild' : 'Bilder'} angehängt`}
+        >
+          <IconImage size={13} /> {prompt.imageIds.length}
+        </span>
+      )}
       {prompt.isExample && <span className="badge badge-example">Beispiel</span>}
       {prompt.tags.slice(0, viewMode === 'list' ? 2 : 3).map((t) => (
         <span className="badge chip-tag" key={t}>
