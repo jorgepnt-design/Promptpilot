@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { IconClose } from './Icons'
 
-const MIN = 1
+const MIN = 0.25
 const MAX = 6
 
 /**
@@ -36,6 +36,15 @@ export function ImageViewer({
     if (zoom <= 1) setPos({ x: 0, y: 0 })
   }, [zoom])
 
+  /* Solange die Bildansicht offen ist, soll die Seite dahinter nicht mitscrollen. */
+  useEffect(() => {
+    const vorher = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = vorher
+    }
+  }, [])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -44,8 +53,8 @@ export function ImageViewer({
         e.stopPropagation()
         onClose()
       }
-      if (e.key === '+') setZoom((z) => begrenzen(z + 0.5))
-      if (e.key === '-') setZoom((z) => begrenzen(z - 0.5))
+      if (e.key === '+') setZoom((z) => begrenzen(z * 1.25))
+      if (e.key === '-') setZoom((z) => begrenzen(z / 1.25))
     }
     document.addEventListener('keydown', onKey, true)
     return () => document.removeEventListener('keydown', onKey, true)
@@ -89,6 +98,12 @@ export function ImageViewer({
     if (zeiger.current.size === 0) ziehStart.current = null
   }
 
+  /* Mausrad zoomt, statt die Seite dahinter zu bewegen. */
+  const onWheel = (e: React.WheelEvent) => {
+    e.preventDefault()
+    setZoom((z) => begrenzen(z * (e.deltaY < 0 ? 1.12 : 1 / 1.12)))
+  }
+
   const onDoppeltippen = () => {
     const jetzt = Date.now()
     if (jetzt - letzterTipp.current < 300) {
@@ -102,7 +117,7 @@ export function ImageViewer({
       <div className="viewer-bar">
         <button
           className="btn btn-sm"
-          onClick={() => setZoom((z) => begrenzen(z - 0.5))}
+          onClick={() => setZoom((z) => begrenzen(z / 1.25))}
           disabled={zoom <= MIN}
           aria-label="Verkleinern"
         >
@@ -111,7 +126,7 @@ export function ImageViewer({
         <span className="hint">{Math.round(zoom * 100)} %</span>
         <button
           className="btn btn-sm"
-          onClick={() => setZoom((z) => begrenzen(z + 0.5))}
+          onClick={() => setZoom((z) => begrenzen(z * 1.25))}
           disabled={zoom >= MAX}
           aria-label="Vergrößern"
         >
@@ -123,7 +138,7 @@ export function ImageViewer({
             setZoom(1)
             setPos({ x: 0, y: 0 })
           }}
-          disabled={zoom === 1}
+          disabled={zoom === 1 && pos.x === 0 && pos.y === 0}
         >
           Zurücksetzen
         </button>
@@ -139,6 +154,7 @@ export function ImageViewer({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
+        onWheel={onWheel}
         onClick={onDoppeltippen}
       >
         <img
