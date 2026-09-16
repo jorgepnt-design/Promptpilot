@@ -5,6 +5,7 @@ import { useRoute } from '../lib/router'
 import { Sheet, useConfirm } from '../components/ui'
 import { TagInput } from '../components/TagInput'
 import { ImageViewer } from '../components/ImageViewer'
+import { CardThumb } from '../components/CardThumb'
 import { IconClose, IconEdit, IconImage, IconPlus, IconStar, IconTrash } from '../components/Icons'
 import { ImageError, MAX_IMAGES_PER_PROMPT, prepareImage } from '../lib/images'
 
@@ -267,9 +268,8 @@ export function NotesPage() {
                 {note.body.length > 220 ? ' …' : ''}
               </p>
               {(note.imageIds ?? []).length > 0 && (
-                <div className="hint" style={{ marginTop: 4 }}>
-                  <IconImage size={14} /> {note.imageIds.length}{' '}
-                  {note.imageIds.length === 1 ? 'Bild' : 'Bilder'}
+                <div style={{ marginTop: 8 }} onClick={() => setOffeneNotiz(note)}>
+                  <CardThumb imageId={note.imageIds[0]} anzahl={note.imageIds.length} />
                 </div>
               )}
               {note.tags.length > 0 && (
