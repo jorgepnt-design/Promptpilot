@@ -32,6 +32,7 @@ const EMPTY_FILTERS: Filters = {
   tool: null,
   language: null,
   favoritesOnly: false,
+  withImagesOnly: false,
   collectionId: null,
 }
 
@@ -159,6 +160,7 @@ export function PromptBrowser({
     (filters.tool ? 1 : 0) +
     (filters.language ? 1 : 0) +
     (!lockFavorites && filters.favoritesOnly ? 1 : 0) +
+    (filters.withImagesOnly ? 1 : 0) +
     (!lockCollectionId && filters.collectionId ? 1 : 0) +
     (filters.query ? 1 : 0)
 
@@ -283,6 +285,14 @@ export function PromptBrowser({
               Favoriten
             </button>
           )}
+          <button
+            className="chip"
+            aria-pressed={filters.withImagesOnly}
+            onClick={() => setFilters((f) => ({ ...f, withImagesOnly: !f.withImagesOnly }))}
+            title="Nur Prompts mit angehängtem Bild"
+          >
+            Mit Bild
+          </button>
           {store.categories.map((c) => (
             <button
               key={c.id}

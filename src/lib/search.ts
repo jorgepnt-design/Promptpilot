@@ -53,6 +53,7 @@ export function filterPrompts({ prompts, filters, sort, index, status }: FilterO
     if (p.status !== status) return false
     if (p.deletedAt) return false
     if (filters.favoritesOnly && !p.favorite) return false
+    if (filters.withImagesOnly && !(p.imageIds ?? []).length) return false
     if (filters.categoryId && p.categoryId !== filters.categoryId) return false
     if (filters.collectionId && !p.collectionIds.includes(filters.collectionId)) return false
     if (filters.tool && p.tool !== filters.tool) return false

@@ -104,6 +104,8 @@ export interface Filters {
   tool: string | null
   language: string | null
   favoritesOnly: boolean
+  /** Nur Prompts, an denen mindestens ein Bild hängt. */
+  withImagesOnly: boolean
   collectionId: ID | null
 }
 
