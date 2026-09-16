@@ -14,6 +14,8 @@ import {
   IconHistory,
   IconLink,
   IconMore,
+  IconNext,
+  IconPrev,
   IconRestore,
   IconStar,
   IconTemplate,
@@ -24,10 +26,17 @@ export function PromptDetail({
   prompt,
   onClose,
   onEdit,
+  onPrev,
+  onNext,
+  position,
 }: {
   prompt: Prompt
   onClose: () => void
   onEdit: () => void
+  /** Blättern innerhalb der gerade gefilterten Liste; fehlt am Rand. */
+  onPrev?: (() => void) | null
+  onNext?: (() => void) | null
+  position?: { index: number; gesamt: number }
 }) {
   const store = useStore()
   const menu = useMenu()
@@ -37,6 +46,25 @@ export function PromptDetail({
   const [images, setImages] = useState<StoredImage[]>([])
   const [offen, setOffen] = useState(false)
   const [grossesBild, setGrossesBild] = useState<{ src: string; alt: string } | null>(null)
+
+  /* Mit den Pfeiltasten blättern – aber nicht, während jemand tippt oder die
+     Bildansicht offen ist. */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const ziel = e.target as HTMLElement | null
+      const tippt = ziel && /^(INPUT|TEXTAREA|SELECT)$/.test(ziel.tagName)
+      if (tippt || grossesBild) return
+      if (e.key === 'ArrowLeft' && onPrev) {
+        e.preventDefault()
+        onPrev()
+      } else if (e.key === 'ArrowRight' && onNext) {
+        e.preventDefault()
+        onNext()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onPrev, onNext, grossesBild])
   // Kurze Prompts bleiben immer offen – ein Knopf darüber wäre nur im Weg.
   const lang = prompt.body.length > 420 || prompt.body.split('\n').length > 10
   const urls = useRef<string[]>([])
@@ -94,6 +122,33 @@ export function PromptDetail({
         onClose={onClose}
         headExtra={
           <>
+            {(onPrev || onNext) && (
+              <>
+                <button
+                  className="icon-btn"
+                  onClick={() => onPrev?.()}
+                  disabled={!onPrev}
+                  aria-label="Vorheriger Prompt"
+                  title="Vorheriger Prompt (Pfeil links)"
+                >
+                  <IconPrev />
+                </button>
+                {position && (
+                  <span className="hint" style={{ minWidth: 52, textAlign: 'center' }}>
+                    {position.index} / {position.gesamt}
+                  </span>
+                )}
+                <button
+                  className="icon-btn"
+                  onClick={() => onNext?.()}
+                  disabled={!onNext}
+                  aria-label="Nächster Prompt"
+                  title="Nächster Prompt (Pfeil rechts)"
+                >
+                  <IconNext />
+                </button>
+              </>
+            )}
             <button
               className={`icon-btn${prompt.favorite ? ' is-active' : ''}`}
               onClick={() => store.toggleFavorite(prompt.id)}

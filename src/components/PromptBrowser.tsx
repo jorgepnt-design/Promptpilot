@@ -174,6 +174,19 @@ export function PromptBrowser({
     (id: string) => route.setQueryParam('prompt', id),
     [route],
   )
+  /* Blättern innerhalb der gerade angezeigten Treffer – so folgt es
+     Suche, Filter und Sortierung. */
+  const blaettern = useMemo(() => {
+    const ids = results.map((p) => p.id)
+    const i = openPrompt ? ids.indexOf(openPrompt.id) : -1
+    return {
+      vorheriger: i > 0 ? ids[i - 1] : null,
+      naechster: i >= 0 && i < ids.length - 1 ? ids[i + 1] : null,
+      index: i + 1,
+      gesamt: ids.length,
+    }
+  }, [results, openPrompt])
+
   const closeOverlay = useCallback(() => {
     const q = new URLSearchParams(route.query)
     q.delete('prompt')
@@ -627,6 +640,17 @@ export function PromptBrowser({
       {openPrompt && mode !== 'bearbeiten' && (
         <PromptDetail
           prompt={openPrompt}
+          onPrev={
+            blaettern.vorheriger
+              ? () => route.setQueryParam('prompt', blaettern.vorheriger as string)
+              : null
+          }
+          onNext={
+            blaettern.naechster
+              ? () => route.setQueryParam('prompt', blaettern.naechster as string)
+              : null
+          }
+          position={blaettern.gesamt > 1 ? { index: blaettern.index, gesamt: blaettern.gesamt } : undefined}
           onClose={closeOverlay}
           onEdit={() => {
             const q = new URLSearchParams(route.query)

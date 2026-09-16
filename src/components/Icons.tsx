@@ -100,6 +100,18 @@ export const IconClose = (p: P) => (
   </svg>
 )
 
+export const IconPrev = (p: P) => (
+  <svg {...base(p)}>
+    <path d="m15 5-7 7 7 7" />
+  </svg>
+)
+
+export const IconNext = (p: P) => (
+  <svg {...base(p)}>
+    <path d="m9 5 7 7-7 7" />
+  </svg>
+)
+
 export const IconCheck = (p: P) => (
   <svg {...base(p)}>
     <path d="m5 12.5 4.5 4.5L19 7" />
