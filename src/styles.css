@@ -1543,20 +1543,25 @@ details.more > .more-body {
   display: grid;
   /* Eine Rasterzelle mit fester Größe: sonst hat height:100% des Bildes
      keinen Bezugswert und der Browser nimmt die natürliche Höhe. */
-  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
-  place-items: stretch;
-  /* Eigene Gestensteuerung: der Browser soll hier nicht mitscrollen. */
-  touch-action: none;
+  place-items: center;
+  /* Ein Finger scrollt (vom Browser erledigt), zwei Finger zoomen (von uns). */
+  touch-action: pan-x pan-y;
   user-select: none;
 }
+.viewer-stage {
+  overflow: auto;
+}
+.viewer-frame {
+  display: grid;
+  /* Feste Zelle, damit height:100% des Bildes einen Bezugswert hat. */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  place-items: stretch;
+  flex: none;
+}
 .viewer-stage img {
-  /* Feste Kantenlängen mit object-fit statt max-*: nur so wird ein sehr hohes
-     Bild zuverlässig auf die Bühne eingepasst. */
   width: 100%;
   height: 100%;
   object-fit: contain;
-  transform-origin: center center;
-  transition: transform 0.08s linear;
 }
 .viewer-hilfe {
   flex: none;
