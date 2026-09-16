@@ -38,12 +38,17 @@ export function ImageViewer({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        // In der Aufnahmephase abfangen und stoppen: sonst schließt das
+        // Fenster darunter mit, obwohl die Bildansicht obenauf liegt.
+        e.stopPropagation()
+        onClose()
+      }
       if (e.key === '+') setZoom((z) => begrenzen(z + 0.5))
       if (e.key === '-') setZoom((z) => begrenzen(z - 0.5))
     }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
   }, [onClose, begrenzen])
 
   const abstand = () => {

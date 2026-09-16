@@ -1473,7 +1473,7 @@ details.more > .more-body {
   overflow: hidden;
   background: var(--bg-soft);
 }
-.detail-media .preview img {
+.preview img {
   display: block;
   width: 100%;
   height: auto;
@@ -1568,4 +1568,13 @@ details.more > .more-body {
   .abgleich-mobil {
     display: none;
   }
+}
+
+/* Vorschaubilder in Notizen: feste Kachelbreite, zum Vergrößern anklickbar. */
+.thumbs .preview {
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--bg-soft);
 }
