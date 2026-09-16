@@ -2,6 +2,7 @@ import { memo } from 'react'
 import type { Prompt, ViewMode } from '../types'
 import { highlight, snippet } from '../lib/search'
 import { useStore } from '../state/store'
+import { CardThumb } from './CardThumb'
 import { Menu, useMenu } from './ui'
 import {
   IconArchive,
@@ -249,6 +250,9 @@ function PromptCardInner({
               </div>
               {meta}
             </div>
+            {(prompt.imageIds ?? []).length > 0 && (
+              <CardThumb imageId={prompt.imageIds[0]} anzahl={prompt.imageIds.length} />
+            )}
             <div className="card-actions">{actions}</div>
           </>
         )}
