@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { IconClose } from './Icons'
 
-const MIN = 0.25
+const MIN = 1
 const MAX = 6
 
 /**
@@ -21,35 +21,20 @@ export function ImageViewer({
   onClose: () => void
 }) {
   const [zoom, setZoom] = useState(1)
+  const [pos, setPos] = useState({ x: 0, y: 0 })
   const zeiger = useRef(new Map<number, { x: number; y: number }>())
   const startAbstand = useRef(0)
   const startZoom = useRef(1)
+  const ziehStart = useRef<{ x: number; y: number; px: number; py: number } | null>(null)
   const letzterTipp = useRef(0)
-  const buehne = useRef<HTMLDivElement>(null)
-  const [flaeche, setFlaeche] = useState({ w: 0, h: 0 })
-
-  /* Die Bühne ausmessen: Prozentangaben helfen hier nicht weiter, weil sich
-     die Rasterzelle sonst nach dem Bild richtet statt umgekehrt. */
-  useEffect(() => {
-    const el = buehne.current
-    if (!el) return
-    const messen = () => setFlaeche({ w: el.clientWidth, h: el.clientHeight })
-    messen()
-    const beobachter = new ResizeObserver(messen)
-    beobachter.observe(el)
-    return () => beobachter.disconnect()
-  }, [])
 
   const begrenzen = useCallback((z: number) => Math.min(MAX, Math.max(MIN, z)), [])
 
-  /* Solange die Bildansicht offen ist, soll die Seite dahinter nicht mitscrollen. */
+  /* Beim Herauszoomen auf Originalgröße die Verschiebung zurücksetzen,
+     sonst bleibt das Bild aus der Mitte gerückt. */
   useEffect(() => {
-    const vorher = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = vorher
-    }
-  }, [])
+    if (zoom <= 1) setPos({ x: 0, y: 0 })
+  }, [zoom])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -59,8 +44,8 @@ export function ImageViewer({
         e.stopPropagation()
         onClose()
       }
-      if (e.key === '+') setZoom((z) => begrenzen(z * 1.25))
-      if (e.key === '-') setZoom((z) => begrenzen(z / 1.25))
+      if (e.key === '+') setZoom((z) => begrenzen(z + 0.5))
+      if (e.key === '-') setZoom((z) => begrenzen(z - 0.5))
     }
     document.addEventListener('keydown', onKey, true)
     return () => document.removeEventListener('keydown', onKey, true)
@@ -78,6 +63,9 @@ export function ImageViewer({
     if (zeiger.current.size === 2) {
       startAbstand.current = abstand()
       startZoom.current = zoom
+      ziehStart.current = null
+    } else if (zeiger.current.size === 1 && zoom > 1) {
+      ziehStart.current = { x: e.clientX, y: e.clientY, px: pos.x, py: pos.y }
     }
   }
 
@@ -87,19 +75,18 @@ export function ImageViewer({
     if (zeiger.current.size === 2 && startAbstand.current > 0) {
       const faktor = abstand() / startAbstand.current
       setZoom(begrenzen(startZoom.current * faktor))
+    } else if (ziehStart.current && zoom > 1) {
+      setPos({
+        x: ziehStart.current.px + (e.clientX - ziehStart.current.x),
+        y: ziehStart.current.py + (e.clientY - ziehStart.current.y),
+      })
     }
   }
 
   const onPointerUp = (e: React.PointerEvent) => {
     zeiger.current.delete(e.pointerId)
     if (zeiger.current.size < 2) startAbstand.current = 0
-  }
-
-  /* Ohne Zusatztaste scrollt das Rad im Bild – mit Strg (oder ⌘) zoomt es. */
-  const onWheel = (e: React.WheelEvent) => {
-    if (!e.ctrlKey && !e.metaKey) return
-    e.preventDefault()
-    setZoom((z) => begrenzen(z * (e.deltaY < 0 ? 1.12 : 1 / 1.12)))
+    if (zeiger.current.size === 0) ziehStart.current = null
   }
 
   const onDoppeltippen = () => {
@@ -115,7 +102,7 @@ export function ImageViewer({
       <div className="viewer-bar">
         <button
           className="btn btn-sm"
-          onClick={() => setZoom((z) => begrenzen(z / 1.25))}
+          onClick={() => setZoom((z) => begrenzen(z - 0.5))}
           disabled={zoom <= MIN}
           aria-label="Verkleinern"
         >
@@ -124,7 +111,7 @@ export function ImageViewer({
         <span className="hint">{Math.round(zoom * 100)} %</span>
         <button
           className="btn btn-sm"
-          onClick={() => setZoom((z) => begrenzen(z * 1.25))}
+          onClick={() => setZoom((z) => begrenzen(z + 0.5))}
           disabled={zoom >= MAX}
           aria-label="Vergrößern"
         >
@@ -132,7 +119,10 @@ export function ImageViewer({
         </button>
         <button
           className="btn btn-sm"
-          onClick={() => setZoom(1)}
+          onClick={() => {
+            setZoom(1)
+            setPos({ x: 0, y: 0 })
+          }}
           disabled={zoom === 1}
         >
           Zurücksetzen
@@ -144,28 +134,27 @@ export function ImageViewer({
       </div>
 
       <div
-        ref={buehne}
         className="viewer-stage"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        onWheel={onWheel}
         onClick={onDoppeltippen}
       >
-        {/* Der innere Rahmen wächst mit dem Zoom; dadurch bekommt der Bereich
-            echte Bildlaufleisten, statt dass wir das Verschieben nachbauen. */}
-        <div
-          className="viewer-frame"
-          style={{ width: flaeche.w * zoom, height: flaeche.h * zoom }}
-        >
-          <img src={src} alt={alt} draggable={false} />
-        </div>
+        <img
+          src={src}
+          alt={alt}
+          draggable={false}
+          style={{
+            transform: `translate(${pos.x}px, ${pos.y}px) scale(${zoom})`,
+            cursor: zoom > 1 ? 'grab' : 'zoom-in',
+          }}
+        />
       </div>
 
       <p className="hint viewer-hilfe">
         Mit zwei Fingern aufziehen, doppelt tippen oder die Knöpfe verwenden. Vergrößert lässt sich
-        das Bild scrollen; mit Strg und Mausrad zoomen.
+        das Bild verschieben.
       </p>
     </div>
   )
