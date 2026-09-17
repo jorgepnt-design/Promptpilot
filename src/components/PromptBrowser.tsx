@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Filters, Prompt, PromptStatus } from '../types'
 import { useStore } from '../state/store'
 import { toolList } from '../lib/tools'
+import { nachReihenfolge } from '../lib/order'
 import { filterPrompts, tokenize } from '../lib/search'
 import { buildMarkdown, buildPlainText, buildJsonBackup, jsonBlob } from '../lib/exportImport'
 import { downloadBlob, timestampName } from '../lib/clipboard'
@@ -138,18 +139,21 @@ export function PromptBrowser({
     store.prompts
       .filter((p) => p.status === status)
       .forEach((p) => p.tags.forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1)))
-    return Array.from(counts.entries())
+    const liste = Array.from(counts.entries())
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'de'))
       .map(([t]) => t)
-  }, [store.prompts, status])
+    // In den Einstellungen gewählte Reihenfolge übernehmen.
+    return nachReihenfolge(liste, store.settings.tagOrder, (t) => t)
+  }, [store.prompts, status, store.settings.tagOrder])
 
   const tools = useMemo(() => {
     const set = new Set<string>()
     store.prompts
       .filter((p) => p.status === status && p.tool)
       .forEach((p) => toolList(p.tool).forEach((t) => set.add(t)))
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'de'))
-  }, [store.prompts, status])
+    const liste = Array.from(set).sort((a, b) => a.localeCompare(b, 'de'))
+    return nachReihenfolge(liste, store.settings.tools, (t) => t)
+  }, [store.prompts, status, store.settings.tools])
 
   const languages = useMemo(() => {
     const set = new Set<string>()

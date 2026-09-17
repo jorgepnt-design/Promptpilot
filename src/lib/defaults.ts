@@ -45,6 +45,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sort: 'updated',
   tools: DEFAULT_TOOLS,
   languages: DEFAULT_LANGUAGES,
+  tagOrder: [],
   onboarded: false,
   examplesLoaded: false,
   accountId: '',

@@ -83,6 +83,8 @@ export interface Settings {
   sort: SortMode
   tools: string[]
   languages: string[]
+  /** Selbst gewählte Reihenfolge der Tags; Unbekanntes hängt hinten an. */
+  tagOrder: string[]
   onboarded: boolean
   examplesLoaded: boolean
   /** Konto-Kennung, zu der die lokalen Daten gehören ('' = nur lokal). */

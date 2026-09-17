@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../state/store'
+import { nachReihenfolge, verschiebe } from '../lib/order'
+import { IconNext, IconPrev } from '../components/Icons'
 import { Sheet, useConfirm } from '../components/ui'
 import { SyncPanel } from '../components/SyncPanel'
 import {
@@ -18,6 +20,42 @@ import { formatBytes } from '../lib/images'
 import { normalizeForCompare } from '../lib/search'
 import { IconDownload, IconPlus, IconTrash, IconUpload } from '../components/Icons'
 import { usePwa } from '../lib/pwa'
+
+/** Zwei kleine Pfeile zum Verschieben einer Zeile. */
+function Sortierpfeile({
+  nachOben,
+  nachUnten,
+  name,
+}: {
+  nachOben: (() => void) | null
+  nachUnten: (() => void) | null
+  name: string
+}) {
+  return (
+    <>
+      <button
+        className="icon-btn"
+        onClick={() => nachOben?.()}
+        disabled={!nachOben}
+        aria-label={`${name} nach oben`}
+        title="Nach oben"
+        style={{ transform: 'rotate(90deg)' }}
+      >
+        <IconPrev size={16} />
+      </button>
+      <button
+        className="icon-btn"
+        onClick={() => nachUnten?.()}
+        disabled={!nachUnten}
+        aria-label={`${name} nach unten`}
+        title="Nach unten"
+        style={{ transform: 'rotate(90deg)' }}
+      >
+        <IconNext size={16} />
+      </button>
+    </>
+  )
+}
 
 export function SettingsPage() {
   const store = useStore()
@@ -42,8 +80,12 @@ export function SettingsPage() {
   const tagCounts = useMemo(() => {
     const m = new Map<string, number>()
     store.prompts.forEach((p) => p.tags.forEach((t) => m.set(t, (m.get(t) ?? 0) + 1)))
-    return Array.from(m.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'de'))
-  }, [store.prompts])
+    const liste = Array.from(m.entries()).sort(
+      (a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'de'),
+    )
+    // Selbst gewählte Reihenfolge schlägt die Sortierung nach Häufigkeit.
+    return nachReihenfolge(liste, store.settings.tagOrder, ([t]) => t)
+  }, [store.prompts, store.settings.tagOrder])
 
   const categoryCounts = useMemo(() => {
     const m = new Map<string, number>()
@@ -173,8 +215,13 @@ export function SettingsPage() {
           umziehen.
         </p>
         <div className="list-rows">
-          {store.categories.map((c) => (
+          {store.categories.map((c, i) => (
             <div className="list-row" key={c.id}>
+              <Sortierpfeile
+                name={`Kategorie ${c.name}`}
+                nachOben={i > 0 ? () => store.moveCategory(c.id, -1) : null}
+                nachUnten={i < store.categories.length - 1 ? () => store.moveCategory(c.id, 1) : null}
+              />
               <span className="grow">{c.name}</span>
               <span className="badge">{categoryCounts.get(c.id) ?? 0}</span>
               <button
@@ -233,8 +280,27 @@ export function SettingsPage() {
           <div className="hint">Noch keine Tags vergeben.</div>
         ) : (
           <div className="list-rows">
-            {tagCounts.map(([tag, count]) => (
+            {tagCounts.map(([tag, count], i) => (
               <div className="list-row" key={tag}>
+                <Sortierpfeile
+                  name={`Tag ${tag}`}
+                  nachOben={
+                    i > 0
+                      ? () =>
+                          store.updateSettings({
+                            tagOrder: verschiebe(tagCounts.map(([t]) => t), i, -1),
+                          })
+                      : null
+                  }
+                  nachUnten={
+                    i < tagCounts.length - 1
+                      ? () =>
+                          store.updateSettings({
+                            tagOrder: verschiebe(tagCounts.map(([t]) => t), i, 1),
+                          })
+                      : null
+                  }
+                />
                 <span className="grow">#{tag}</span>
                 <span className="badge">{count}</span>
                 <button
@@ -271,8 +337,21 @@ export function SettingsPage() {
         <h3>KI-Tools</h3>
         <p>Diese Vorschläge erscheinen im Editor. Eigene Einträge sind jederzeit möglich.</p>
         <div className="list-rows">
-          {store.settings.tools.map((t) => (
+          {store.settings.tools.map((t, i) => (
             <div className="list-row" key={t}>
+              <Sortierpfeile
+                name={t}
+                nachOben={
+                  i > 0
+                    ? () => store.updateSettings({ tools: verschiebe(store.settings.tools, i, -1) })
+                    : null
+                }
+                nachUnten={
+                  i < store.settings.tools.length - 1
+                    ? () => store.updateSettings({ tools: verschiebe(store.settings.tools, i, 1) })
+                    : null
+                }
+              />
               <span className="grow">{t}</span>
               <button
                 className="icon-btn"

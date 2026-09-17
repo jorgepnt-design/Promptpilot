@@ -31,6 +31,7 @@ import {
   emptyPrompt,
 } from '../lib/defaults'
 import { newId } from '../lib/id'
+import { verschiebe } from '../lib/order'
 import { buildIndex, normalizeForCompare, type SearchIndex } from '../lib/search'
 import { copyText } from '../lib/clipboard'
 
@@ -76,6 +77,7 @@ interface StoreValue {
 
   addCategory: (name: string) => Promise<Category | null>
   renameCategory: (id: ID, name: string) => Promise<void>
+  moveCategory: (id: ID, richtung: -1 | 1) => Promise<void>
   deleteCategory: (id: ID, moveToId: ID | null) => Promise<void>
 
   saveNote: (patch: Partial<Note> & { id?: ID }) => Promise<Note>
@@ -399,6 +401,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return cat
     },
     [categories, notify],
+  )
+
+  /** Kategorie um eine Position nach oben oder unten schieben. */
+  const moveCategory = useCallback(
+    async (id: ID, richtung: -1 | 1) => {
+      const sortiert = [...categories].sort((a, b) => a.order - b.order)
+      const i = sortiert.findIndex((c) => c.id === id)
+      const neu = verschiebe(sortiert, i, richtung)
+      if (neu === sortiert) return
+      const jetzt = Date.now()
+      const aktualisiert = neu.map((c, index) => ({ ...c, order: index, updatedAt: jetzt }))
+      await db.putMany(STORES.categories, aktualisiert)
+      setCategories(aktualisiert)
+    },
+    [categories],
   )
 
   const renameCategory = useCallback(async (id: ID, name: string) => {
@@ -745,6 +762,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     copyPrompt,
     findDuplicates,
     addCategory,
+    moveCategory,
     renameCategory,
     deleteCategory,
     addCollection,
