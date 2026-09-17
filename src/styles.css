@@ -1341,6 +1341,7 @@ details.more > .more-body {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
   padding: 8px 12px;
   border-top: 1px solid var(--line);
   background: var(--surface);
@@ -1623,5 +1624,16 @@ details.more > .more-body {
   .card-thumb {
     width: 44px;
     height: 44px;
+  }
+}
+
+/* Auf schmalen Geräten reicht die Breite nicht für Name und alle Knöpfe
+   nebeneinander – der Name wurde bis auf null zusammengedrückt. Er bekommt
+   dort eine eigene Zeile. */
+@media (max-width: 620px) {
+  .list-row .grow {
+    flex: 1 0 100%;
+    order: -1;
+    font-weight: 600;
   }
 }
